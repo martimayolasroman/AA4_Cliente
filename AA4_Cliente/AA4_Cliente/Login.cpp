@@ -65,32 +65,49 @@ GameState Login::Update()
 
 
 	while (window->isOpen()) {
-		//	std::cout << "[DEBUG] Finestra no vàlida o tancada" << std::endl;
-		//	return;
-		//}
-		// 
-		// 
-		//window->clear(backgroundColor);
+		Client::getInstance()->run(); // Procesar paquetes entrantes
+		Render(window); // Dibujar la UI
 
-		//window->display();
+		// Comprobar si ha llegado una respuesta de login/registro
+		if (Client::getInstance()->hasLoginResponse()) {
+			bool success = Client::getInstance()->getLoginStatus();
+			Client::getInstance()->resetLoginResponse(); // Consumir la respuesta
+			if (success) {
+				std::cout << "[LoginUI] Login exitoso, cambiando a LOBBY." << std::endl;
+				return GameState::LOBBY;
+			}
+			else {
+				std::cout << "[LoginUI] Login fallido." << std::endl;
+				// Mostrar mensaje de error en la UI
+				
+			}
+		}
 
+		if (Client::getInstance()->hasRegisterResponse()) {
+			bool success = Client::getInstance()->getRegisterStatus();
+			Client::getInstance()->resetRegisterResponse();
+			if (success) {
+				std::cout << "[LoginUI] Registro exitoso, cambiando a LOBBY." << std::endl;
+				return GameState::LOBBY; // O directamente al lobby si el servidor auto-loguea
+			}
+			else {
+				std::cout << "[LoginUI] Registro fallido." << std::endl;
+				// Mostrar mensaje de error
+				
+			}
+		}
 
 
 		while (const std::optional event = window->pollEvent()) {
-
-			Client::getInstance()->run();
-			Render(window);
-			GameState state = EventHandler(*event);
+			GameState state = EventHandler(*event); // Procesar input del usuario
 			if (state != GameState::LOGIN) {
-				return state;
+				return state; // Si EventHandler cambia el estado (ej. EXIT)
 			}
-
 		}
-
+		// Redibujar por si errorMessageText cambió
+	   // Render(window); // Podrías necesitar redibujar si el mensaje de error cambia
 	}
-
-	/*return GameState::LOGIN;*/
-
+	return GameState::EXIT; // Si la ventana se cierra
 }
 
 void Login::Render(sf::RenderWindow* window)
@@ -130,24 +147,26 @@ GameState Login::EventHandler(const sf::Event& event)
 		window->close();
 	}
 	if (loginButton && loginButton->handleEvent(event, *window)) {
-		
-		if (Client::getInstance()->loginAction(nameText->getString().toAnsiString(), passwordText->getString().toAnsiString())) {
+		if (!Client::getInstance()->hasReceivedMap()) {
+			std::cout << "[LoginUI] Esperando recepción del mapa..." << std::endl;
 			
-			return GameState::LOBBY;
+			return GameState::LOGIN; // No hacer nada si el mapa no ha llegado
 		}
-		else {
-			std::cout << "[DEBUG] Login Fail" << std::endl;
-		}
+		std::cout << "[LoginUI] Botón Login presionado." << std::endl;
+		Client::getInstance()->loginAction(nameInput, passwordInput); // nameInput es std::string
+		// NO se cambia de estado aquí. Update() lo hará cuando llegue la respuesta.
+		
 	}
 
 	if (registerButton && registerButton->handleEvent(event, *window)) {
+		if (!Client::getInstance()->hasReceivedMap()) {
+			std::cout << "[LoginUI] Esperando recepción del mapa..." << std::endl;
+			
+			return GameState::LOGIN;
+		}
+		std::cout << "[LoginUI] Botón Register presionado." << std::endl;
+		Client::getInstance()->RegisterAction(nameInput, passwordInput);
 		
-		if (Client::getInstance()->RegisterAction(nameText->getString().toAnsiString(), passwordText->getString().toAnsiString())) {
-			return GameState::LOBBY;
-		}
-		else {
-			std::cout << "[DEBUG] Register Fail" << std::endl;
-		}
 	}
 
 

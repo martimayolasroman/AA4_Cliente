@@ -16,14 +16,19 @@ class Client
 private:
 
 	static Client* instanceClient;
-	// Evitamos copia y asignación
-	//Client(const Client&) = delete;
-//	Client& operator = (const Client&) = delete;
+	
 
 	bool loginOk = false;
 	bool RegisterOk = false;
+	bool m_hasLoginResponse = false;
+	bool m_hasRegisterResponse = false;
+	bool m_isInMatchmakingQueue = false;
+	bool m_matchFound = false;
+	std::string m_gameServerIp;
+	unsigned short m_gameServerPort = 0;
 
-
+	std::string m_mapData;
+	bool m_mapReceived = false;
 
 
 	Client();
@@ -74,18 +79,13 @@ public:
 
 		bool loginAction(std::string nick, std::string pass);
 		bool RegisterAction(std::string nick, std::string pass);
-		void createRoom(std::string roomId);
-		void joinRoom(std::string roomId);
-
-		void startP2P();
-		void checkP2PConnections();
-		void processPeerPacket(sf::Packet& packet);
+	
 
 		bool isGameReady() const;
 		void setGameReady(bool ready);
 
-		void sendPacketToPeers(sf::Packet& packet);
-		void sendMove(int color, int idCasilla, int numberMoves);
+		
+		
 		void receiveMoveFromPeer(sf::Packet& packet);
 		bool MoveReceived = false;
 		bool isMoveReceived();
@@ -93,15 +93,25 @@ public:
 		std::tuple<int, int, int> getMovement();
 		int getColor();
 		std::string getNickname();
-		void sendGameOver(int playerColor);
-		void processGameOver(sf::Packet& packet);
-		void handlePeerDisconnect(sf::TcpSocket*  Clientsocket);
-		void disonnectFromPeers();
+		
 		
 		void reconnectToServer();
 
 
+		bool requestMatchmakingFriendly();
 
+
+		bool hasReceivedMap() const { return m_mapReceived; }
+		const std::string& getMapData() const { return m_mapData; }
+		bool hasLoginResponse() const { return m_hasLoginResponse; }
+		bool hasRegisterResponse() const { return m_hasRegisterResponse; }
+		void resetLoginResponse() { m_hasLoginResponse = false; }
+		bool getLoginStatus() const { return loginOk; }
+		bool hasMatchBeenFound() const { return m_matchFound; }
+		std::string getGameServerIp() const { return m_gameServerIp; }
+		unsigned short getGameServerPort() const { return m_gameServerPort; }
+		bool getRegisterStatus() const { return RegisterOk; }
+		void resetRegisterResponse() { m_hasRegisterResponse = false; }
 		//MainMenu mainMenu;
 		//Game parchis;
 		

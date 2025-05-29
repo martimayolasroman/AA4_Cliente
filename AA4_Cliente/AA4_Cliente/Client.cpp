@@ -4,22 +4,24 @@
 
 enum  PacketType
 {
-    HANDSHAKE = 0,
-    LOGIN,
-    REGISTER,
-    CREATE_ROOM,
-    JOIN_ROOM,
-    DISCONNECT,
-    LOGIN_OK,
-    LOGIN_FAIL,
-    REGISTER_OK,
-    REGISTER_FAIL,
-    ROOM_CREATED,
-    ROOM_EXISTS,
-    JOIN_OK,
-    JOIN_FAIL,
-    START_GAME,
-    UNKNOWN
+    // Cliente a Servidor
+    C_REQUEST_LOGIN = 1,
+    C_REQUEST_REGISTER = 2,
+    C_REQUEST_MATCHMAKING_FRIENDLY = 3,
+    C_MAP_RECEIVED_ACK = 4,
+
+    // Servidor a Cliente
+    S_MAP_DATA = 100,
+    S_LOGIN_OK = 101,
+    S_LOGIN_FAIL = 102,
+    S_REGISTER_OK = 103,
+    S_REGISTER_FAIL = 104,
+    S_ADDED_TO_MATCHMAKING_QUEUE = 105,
+    S_MATCH_FOUND = 106,
+    S_ERROR_GENERAL = 107, // Para errores genéricos
+
+
+    UNKNOWN = 255
 };
 
 
@@ -36,7 +38,7 @@ enum  PacketTypeP2P
 Client* Client::instanceClient = nullptr;
 
 
-sf::Packet& operator >> (sf::Packet& packet, PacketType& tipo) {
+inline sf::Packet& operator >> (sf::Packet& packet, PacketType& tipo) {
 
     int temp;
     packet >> temp;
@@ -45,15 +47,10 @@ sf::Packet& operator >> (sf::Packet& packet, PacketType& tipo) {
     return packet;
 }
 
-sf::Packet& operator >> (sf::Packet& packet, PacketTypeP2P& tipo) {
-
-    int temp;
-    packet >> temp;
-    tipo = static_cast<PacketTypeP2P>(temp);
-
+inline sf::Packet& operator << (sf::Packet& packet, PacketType tipo) {
+    packet << static_cast<int>(tipo);
     return packet;
 }
-
 
 
 Client::Client() 
@@ -80,7 +77,7 @@ bool Client::connectToServer(unsigned short port)
 
     if (Clientsocket.connect(SERVER_IP, port) != sf::Socket::Status::Done) {
         std::cerr << "error al conectar al servidor" << std::endl;
-      
+        connected = false;
         return false;
     }
     else {
@@ -109,7 +106,7 @@ void Client::run()
 		processPacket(incomingPacked);
 	}
 
-	checkP2PConnections();
+	
 
 	//Ensenyar Menu de Login / Register
 
@@ -124,15 +121,17 @@ bool Client::loginAction(std::string nick, std::string pass)
    
        packet.clear();
 
-        packet << LOGIN << nick << pass;
+        packet << C_REQUEST_LOGIN << nick << pass;
         std::cout << "[CLIENT] Enviant LOGIN: " << nick << ", " << pass << std::endl;
         clientNick = nick;
-        sendPacket(packet);
+      
+        m_hasLoginResponse = false; // Resetear para esperar nueva respuesta
+        return sendPacket(packet); // Devuelve si el envío fue exitoso
 
-        Clientsocket.setBlocking(true);
+       /* Clientsocket.setBlocking(true);
         run();
         Clientsocket.setBlocking(false);
-        return loginOk;
+        return loginOk;*/
    
 }
 
@@ -141,14 +140,15 @@ bool Client::RegisterAction(std::string nick, std::string pass)
     
     packet.clear();
 
-        packet << REGISTER << nick << pass;
+        packet << C_REQUEST_REGISTER << nick << pass;
         std::cout << "[CLIENT] Enviant REGISTER: " << nick << ", " << pass << std::endl;
-        sendPacket(packet);
+        m_hasRegisterResponse = false; // Resetear para esperar nueva respuesta
+        return sendPacket(packet);
 
-        Clientsocket.setBlocking(true);
+       /* Clientsocket.setBlocking(true);
         run();
         Clientsocket.setBlocking(false);
-        return RegisterOk;
+        return RegisterOk;*/
 }
 
 bool Client::sendPacket(sf::Packet& packet)
@@ -217,14 +217,7 @@ void Client::startGame(sf::Packet& packet)
             << " (" << ipStr << ":" << port << ")" << std::endl;
     }
 
-    //if (packet.endOfPacket()) {
-    //   // std::cout << "[CLIENT] Fi correcte del paquet." << std::endl;
-    //}
-    //else {
-    //    std::cout << "[CLIENT] ATENCIÓ: El paquet encara té dades pendents." << std::endl;
-    //}
-
-    startP2P();
+ 
 
 }
 
@@ -234,64 +227,73 @@ void Client::processPacket(sf::Packet packet)
 {
 
     PacketType packetType;
-
-    //sf::Packet originalPacket = packet;
-
      packet >> packetType;
 
-    switch (packetType)
-    {
-    case LOGIN:
-      //  LoginUser();
-        break;
-    case REGISTER:
-       // RegisterUser();
-        break;
-    case CREATE_ROOM:
+     switch (packetType)
+     {
+     case S_MAP_DATA: {
 
-        break;
-    case JOIN_ROOM:
+            std::string receivedMapContent;
 
+            if (packet >> receivedMapContent) {
+                m_mapData = receivedMapContent;
+                m_mapReceived = true;
+                std::cout << "[CLIENT] Mapa recibido del servidor. Tamaño: " << m_mapData.length() << " bytes." << std::endl;
+               // std::cout << receivedMapContent << std::endl;
+            }
+            else {
+                std::cerr << "[CLIENT] Error leyendo contenido del mapa del paquete S_MAP_DATA." << std::endl;
+            }
+        }
         break;
-    case LOGIN_OK:
+
+    case S_LOGIN_OK:
         std::cout << "Usuari validat correctament " << std::endl;
         loginOk = true;
-
-        //Menu de crear o unirse a sala
-
+        m_hasLoginResponse = true;
         break;
-    case LOGIN_FAIL:
+    case S_LOGIN_FAIL:
         std::cout << "Usuari o contrasenya incorrectes " << std::endl;
+         m_hasLoginResponse = true;
         break;
-    case REGISTER_OK:
+    case S_REGISTER_OK:
         std::cout << "Usuari registrat correctament " << std::endl;
         RegisterOk = true;
+        m_hasRegisterResponse = true; // Nueva flag
         //Menu de crear o unirse a sala
 
         break;
-    case REGISTER_FAIL:
+    case S_REGISTER_FAIL:
         std::cout << "Usuari ja existeix a la BBDD" << std::endl;
+        m_hasRegisterResponse = true; // Nueva flag
         break;
-    case ROOM_CREATED:
-        std::cout << "Sala creada correctament!" << std::endl;
+    case S_ADDED_TO_MATCHMAKING_QUEUE:
+        std::cout << "[CLIENT] Añadido a la cola de matchmaking." << std::endl;
+        // Actualizar estado de la UI a "En cola..."
+        m_isInMatchmakingQueue = true;
         break;
-    case ROOM_EXISTS:
-        std::cout << "Ja existeix una sala amb aquest ID" << std::endl;
+    case S_MATCH_FOUND:
+        {
+        std::cout << "[CLIENT] Partida encontrada! Conectar a GameServer en " << std::endl;
+        //std::string gameServerIp;
+        //unsigned short gameServerPort;
+        //if (packet >> gameServerIp >> gameServerPort) {
+        //    std::cout << "[CLIENT] Partida encontrada! Conectar a GameServer en " << gameServerIp << ":" << gameServerPort << std::endl;
+        //    m_gameServerIp = gameServerIp;
+        //    m_gameServerPort = gameServerPort;
+        //    m_matchFound = true; // Nueva flag
+        //    // Aquí el cliente debería cambiar de estado para desconectarse de este servidor
+        //    // y conectarse al GameServer.
+        //}
+        //else {
+        //    std::cerr << "[CLIENT] Error leyendo datos de S_MATCH_FOUND." << std::endl;
+        //}
+    
         break;
-    case JOIN_OK:
-        std::cout << "T'has unit correctament a la sala" << std::endl;
-        break;
-    case JOIN_FAIL:
-        std::cout << "No s'ha pogut unir a la sala (no existeix o esta plena)" << std::endl;
-        break;
-    case START_GAME:
+    
+        }
        
-        startGame(packet);
-        break;
-
-    case DISCONNECT:
-       
-        break;
+   
     }
 
 
@@ -309,19 +311,7 @@ void Client::setGameReady(bool ready)
     gameReady = ready;
 }
 
-void Client::sendMove(int color, int idCasilla, int numberMoves) {
 
-    packet.clear();
-
-    packet << MOVE_PIECE << currentMoveId /*<< getNickname()*/ << color << idCasilla << numberMoves;
-    std::cout << "[SendMove] Enviant moviment amb ID= " << currentMoveId
-        << " color=" << color << " casella=" << idCasilla
-        << " moviments=" << numberMoves << std::endl;
-
-   
-    sendPacketToPeers(packet);
-    currentMoveId++;
-}
 
 void Client::receiveMoveFromPeer(sf::Packet& packet)
 {
@@ -376,64 +366,7 @@ std::string Client::getNickname()
     return clientNick;
 }
 
-void Client::sendGameOver(int playerColor)
-{
 
-    sf::Packet packet;
-    packet << GAME_OVER << playerColor;
-    sendPacketToPeers(packet);
-
-
-}
-
-void Client::processGameOver(sf::Packet& packet)
-{
-
-    int winnerColor;
-    packet >> winnerColor;
-
-    std::cout << "[CLIENT] Partida finalitzada! Ha guanyat el jugador amb color: " << winnerColor << std::endl;
-
-    disonnectFromPeers();
-   
-     reconnectToServer();
-        
-
-
-}
-
-void Client::handlePeerDisconnect(sf::TcpSocket* Clientsocket)
-{
-    selector.remove(*Clientsocket);
-
-    auto it = std::find(peerSockets.begin(), peerSockets.end(), Clientsocket);
-
-    if (it != peerSockets.end()) {
-        std::cout << "[CLIENT] Eliminant peer desconnectat.  "  << std::endl;
-        delete* it;
-        peerSockets.erase(it);
-    }
-
-
-
-
-
-}
-
-void Client::disonnectFromPeers()
-{
-
-    for (auto& peer : peerSockets) {
-        peer->disconnect();
-        delete peer;
-    }
-    peerSockets.clear();
-    selector.clear();
-    selector.add(listener);
-    std::cout << "[CLIENT] Desconnectat de tots els peers." << std::endl;
-
-
-}
 
 
 
@@ -453,172 +386,24 @@ void Client::reconnectToServer()
 
 }
 
-
-void Client::sendPacketToPeers(sf::Packet& packet)
+bool Client::requestMatchmakingFriendly()
 {
-
-
-    for (auto& peers : peerSockets) {
-        if (peers->send(packet) != sf::Socket::Status::Done) {
-            std::cout << "[CLIENT] Error al enviar paquete a los peers "  << std::endl;
-            handlePeerDisconnect(peers);
-        };
+    if (!connected) return false;
+    sf::Packet pkt;
+    pkt << C_REQUEST_MATCHMAKING_FRIENDLY;
+    if (Clientsocket.send(pkt) == sf::Socket::Status::Done) {
+        std::cout << "[CLIENT] Solicitud de matchmaking enviada." << std::endl;
+        return true;
     }
-
-
-
-}
-
-void Client::createRoom(std::string roomId)
-{
-
-    sf::Packet packet;
-
-    packet << CREATE_ROOM << roomId;
-    std::cout << "[CLIENT] Enviant CREATE_ROOM: " << roomId << std::endl;
-    sendPacket(packet);
-
-
-}
-
-void Client::joinRoom(std::string roomId)
-{
-
-    sf::Packet packet;
-    packet << JOIN_ROOM << roomId;
-    std::cout << "[CLIENT] Enviant JOIN_ROOM: " << roomId << std::endl;
-    sendPacket(packet);
-
-
-
-
+    std::cerr << "[CLIENT] Error enviando matchmaking." << std::endl;
+    return false;
 }
 
 
-// ------------------- IA -------------------------------
-void Client::startP2P()
-{
-
-    Clientsocket.disconnect();
-
-    if (listener.listen(myPort) != sf::Socket::Status::Done) {
-        std::cerr << "[CLIENT] Error escoltant al port " << myPort << std::endl;
-        return;
-    }
-    std::cout << "[CLIENT] Escoltant al port " << myPort << std::endl;
-
-    selector.add(listener);
-
-    for (const auto& peer : peers) {
-        sf::TcpSocket* socket = new sf::TcpSocket();
-
-
-        if (socket->connect(sf::IpAddress::resolve(peer.ip).value(), peer.port, sf::seconds(5.f)) == sf::Socket::Status::Done) {
-            std::cout << "[CLIENT] Connectat a " << peer.nickname
-                << " (" << peer.ip << ":" << peer.port << ")" << std::endl;
-            peerSockets.push_back(socket);
-            selector.add(*socket);
-        }
-        else {
-            std::cerr << "[CLIENT] No s'ha pogut connectar a " << peer.nickname
-                << " (" << peer.ip << ":" << peer.port << ")" << std::endl;
-            delete socket;
-        }
-    }
-
-    std::cout << "[CLIENT] Preparat per a connexions P2P." << std::endl;
-
-
-    setGameReady(true);
-
-
-
-}
-
-void Client::checkP2PConnections()
-{
-
-    
-    if (selector.wait(sf::milliseconds(1)))
-    {
-        // 1. Alguna connexió entrant?
-        if (selector.isReady(listener))
-        {
-            sf::TcpSocket* newPeer = new sf::TcpSocket();
-            if (listener.accept(*newPeer) == sf::Socket::Status::Done)
-            {
-                std::cout << "[CLIENT] Nova connexió P2P rebuda!" << std::endl;
-                peerSockets.push_back(newPeer);
-                selector.add(*newPeer);
-            }
-            else
-            {
-                delete newPeer;
-            }
-        }
-
-        // 2. Missatges dels peers
-        for (auto socket : peerSockets)
-        {
-            if (selector.isReady(*socket))
-            {
-                sf::Packet paquetRebut;
-                if (socket->receive(paquetRebut) == sf::Socket::Status::Done)
-                {
-                    // Aquí tractarem el missatge rebut
-                    std::cout << "[CLIENT] Missatge rebut d'un peer!" << std::endl;
-                    processPeerPacket(paquetRebut);
-                }
-                else
-                {
-                    std::cerr << "[CLIENT] Error rebent paquet d'un peer!" << std::endl;
-                    handlePeerDisconnect(socket);
-                }
-            }
-        }
-    }
 
 
 
 
-
-
-
-
-
-
-}
-
-// ------------------- IA -------------------------------
-
-void Client::processPeerPacket(sf::Packet& packet)
-{
-
-    std::cout << "[CLIENT] Paquet P2P rebut " << std::endl;
-
-
-    PacketTypeP2P packetTypep2P;
-
-
-    packet >> packetTypep2P;
-
-    switch (packetTypep2P)
-    {
-    case MOVE_PIECE:
-        receiveMoveFromPeer(packet);
-        break;
-    case TURN_END:
-        break;
-    case GAME_OVER:
-        processGameOver(packet);
-
-        break;
-    default:
-        break;
-    }
-
-
-}
 
 
 

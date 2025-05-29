@@ -9,14 +9,15 @@ GameState Lobby::EventHandler(const sf::Event& event)
 	if (enterLobbyButton && enterLobbyButton->handleEvent(event, *window)) {
 		std::cout << "Lobby id to join: " << idLobbyText->getString().toAnsiString() << std::endl;
 
-		Client::getInstance()->joinRoom(idLobbyText->getString().toAnsiString());
+		Client::getInstance()->requestMatchmakingFriendly();
+		/*Client::getInstance()->joinRoom(idLobbyText->getString().toAnsiString());*/
 
  	}
 
 	if (createLobbyButton && createLobbyButton->handleEvent(event, *window)) {
 		std::cout << "Lobby id to create: " << idLobbyText->getString().toAnsiString() << std::endl;
-		Client::getInstance()->createRoom(idLobbyText->getString().toAnsiString());
-
+		/*Client::getInstance()->createRoom(idLobbyText->getString().toAnsiString());*/
+		Client::getInstance()->requestMatchmakingFriendly();
 
 	}
 
