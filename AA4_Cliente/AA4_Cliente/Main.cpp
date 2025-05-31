@@ -8,6 +8,7 @@
 #include "Login.h"
 #include "Lobby.h"
 #include "Game.h"
+#include "SearchMenu.h"
 
 #define SERVER_PORT 55000
 
@@ -30,10 +31,12 @@ void main() {
 	
 	sf::RenderWindow* window = new sf::RenderWindow(sf::VideoMode({ WIDTH, HEIGHT }), "| Cliente Parchis |");;
 	
-	GameState currentState = GameState::GAME;
+	GameState currentState = GameState::SEARCH;
 
 	Login loginMenu(window);
 	Lobby lobbyMenu(window);
+	SearchGameMenu searchMenu(window);
+	
 	/*Game *parchis;*/
 
 	
@@ -51,6 +54,9 @@ void main() {
 			break;
 		case GameState::LOBBY:
 			currentState = lobbyMenu.Update();
+			break;
+		case GameState::SEARCH:
+			currentState = searchMenu.Update();
 			break;
 		case GameState::GAME:
 		{
