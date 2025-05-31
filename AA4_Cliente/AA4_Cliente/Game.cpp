@@ -1,3 +1,286 @@
+
+#include "game.h"
+
+// Function to load map from .txt file (definition)
+std::vector<sf::RectangleShape> loadMap(const std::string& filename) {
+    std::vector<sf::RectangleShape> platforms;
+    std::ifstream inputFile(filename);
+    std::string line;
+    float y = 0;
+
+    if (!inputFile.is_open()) {
+        std::cerr << "Error: Could not open map file: " << filename << std::endl;
+        // Create a default floor if map loading fails
+        sf::RectangleShape floor;
+        floor.setSize({ WINDOW_WIDTH, TILE_SIZE }); //WINDOW_WIDTH and TILE_SIZE are global consts
+        floor.setFillColor(COLOR_DEFAULT_FLOOR_GRAY); //COLOR_DEFAULT_FLOOR_GRAY is a global const
+        floor.setPosition({ 0, WINDOW_HEIGHT - TILE_SIZE }); //WINDOW_HEIGHT is a global const
+        platforms.push_back(floor);
+        return platforms;
+    }
+
+    while (std::getline(inputFile, line)) {
+        float x = 0;
+        for (char c : line) {
+            if (c == 'P') {
+                sf::RectangleShape platform;
+                platform.setSize({ TILE_SIZE, TILE_SIZE });
+                platform.setFillColor(COLOR_PLATFORM_BROWN);
+                platform.setPosition({ x, y });
+                platforms.push_back(platform);
+            }
+            x += TILE_SIZE;
+        }
+        y += TILE_SIZE;
+    }
+    inputFile.close();
+    return platforms;
+}
+
+Game::Game(sf::RenderWindow* window)
+    : m_window(window),
+    m_player(), // Player constructor handles its own initialization
+    m_healthText(nullptr),
+    m_livesText(nullptr),
+    m_gameOverText(nullptr),
+    m_gameOverState(false) {
+
+    bool serverConnected = false; // As in original main
+    if (!serverConnected) {
+        std::cout << "Server connection failed. Starting local game." << std::endl;
+    }
+
+    m_platforms = loadMap("map.txt");
+
+    std::string fontFileName = "your_font.ttf"; // <<< REMEMBER TO CHANGE THIS
+    if (!m_font.openFromFile(fontFileName)) {
+        std::cerr << "Error: Could not load font: " << fontFileName << std::endl;
+        std::cerr << "Please ensure '" << fontFileName << "' is in the same directory as the executable." << std::endl;
+
+        // Create default map.txt if it doesn't exist or is empty, when font load fails
+        std::ofstream defaultMap("map.txt", std::ios::app); // Open in append mode
+        if (defaultMap.is_open()) {
+            defaultMap.seekp(0, std::ios_base::end); // Go to the end of the file
+            if (defaultMap.tellp() == 0) { // Check if file is empty
+                defaultMap << "................................\n";
+                defaultMap << "................................\n";
+                defaultMap << "................................\n";
+                defaultMap << "....PPPP........................\n";
+                defaultMap << "................................\n";
+                defaultMap << ".PPPPPPPPPP...........PPPP......\n";
+                defaultMap << "................................\n";
+                defaultMap << "................................\n";
+                defaultMap << "PPPPP...........PPPPPP..........\n";
+                defaultMap << "................................\n";
+                defaultMap << "................................\n";
+                defaultMap << "PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP\n";
+                defaultMap << "PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP\n";
+            }
+            defaultMap.close();
+        }
+        // Check for the specific default floor added when map load fails AND font load fails
+        // This logic was in the original code after font loading failure
+        if (m_platforms.size() == 1 &&
+            m_platforms[0].getSize() == sf::Vector2f(WINDOW_WIDTH, TILE_SIZE) &&
+            m_platforms[0].getPosition() == sf::Vector2f(0.f, WINDOW_HEIGHT - TILE_SIZE) &&
+            m_platforms[0].getFillColor() == COLOR_DEFAULT_FLOOR_GRAY) {
+            m_platforms = loadMap("map.txt"); // Attempt to reload if it was just the default floor from initial loadMap failure
+        }
+    }
+    else {
+        m_healthText = new sf::Text(m_font, "Health: " + std::to_string(m_player.health), 24);
+        m_healthText->setFillColor(COLOR_TEXT_WHITE);
+        m_healthText->setPosition({ 10, 10 });
+
+        m_livesText = new sf::Text(m_font, "Lives: " + std::to_string(m_player.lives), 24);
+        m_livesText->setFillColor(COLOR_TEXT_WHITE);
+        m_livesText->setPosition({ 10, 40 });
+
+        m_gameOverText = new sf::Text(m_font, "GAME OVER", 72);
+        m_gameOverText->setFillColor(COLOR_GAMEOVER_RED);
+        sf::FloatRect textRect = m_gameOverText->getLocalBounds();
+        m_gameOverText->setOrigin({
+            textRect.position.x + textRect.size.x / 2.0f,
+            textRect.position.y + textRect.size.y / 2.0f
+            });
+        m_gameOverText->setPosition({ WINDOW_WIDTH / 2.0f, WINDOW_HEIGHT / 2.0f });
+    }
+}
+
+Game::~Game() {
+    delete m_healthText;
+    delete m_livesText;
+    delete m_gameOverText;
+    // m_window is managed externally, so not deleted here
+}
+
+void Game::run() {
+    while (m_window->isOpen()) {
+        float deltaTime = m_clock.restart().asSeconds();
+        std::optional<sf::Event> opt_event;
+        while ((opt_event = m_window->pollEvent())) {
+            sf::Event& event = *opt_event;
+            if (event.is<sf::Event::Closed>())
+                m_window->close();
+
+            if (!m_gameOverState) {
+                if (const auto* keyPressed = event.getIf<sf::Event::KeyPressed>()) {
+                    if (keyPressed->code == sf::Keyboard::Key::A || keyPressed->code == sf::Keyboard::Key::Left) {
+                        m_player.velocity.x = -PLAYER_SPEED;
+                        m_player.facingRight = false;
+                    }
+                    else if (keyPressed->code == sf::Keyboard::Key::D || keyPressed->code == sf::Keyboard::Key::Right) {
+                        m_player.velocity.x = PLAYER_SPEED;
+                        m_player.facingRight = true;
+                    }
+                    else if ((keyPressed->code == sf::Keyboard::Key::W || keyPressed->code == sf::Keyboard::Key::Up || keyPressed->code == sf::Keyboard::Key::Space) && m_player.onGround) {
+                        m_player.velocity.y = -JUMP_STRENGTH;
+                        m_player.onGround = false;
+                    }
+                }
+                if (const auto* keyReleased = event.getIf<sf::Event::KeyReleased>()) {
+                    if ((keyReleased->code == sf::Keyboard::Key::A || keyReleased->code == sf::Keyboard::Key::Left) && m_player.velocity.x < 0) {
+                        m_player.velocity.x = 0;
+                    }
+                    else if ((keyReleased->code == sf::Keyboard::Key::D || keyReleased->code == sf::Keyboard::Key::Right) && m_player.velocity.x > 0) {
+                        m_player.velocity.x = 0;
+                    }
+                }
+                // Shoot condition: Left Mouse OR Left Ctrl OR Right Ctrl
+                if ((sf::Mouse::isButtonPressed(sf::Mouse::Button::Left) ||
+                    sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) ||
+                    sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl))
+                    && m_player.shootTimer <= 0) {
+                    m_bullets.emplace_back(m_player.shape.getPosition(), m_player.facingRight);
+                    m_player.shootTimer = SHOOT_COOLDOWN;
+                }
+            }
+        }
+
+        if (m_player.shootTimer > 0) {
+            m_player.shootTimer -= deltaTime;
+        }
+
+        if (!m_gameOverState) {
+            // Apply gravity
+            m_player.velocity.y += GRAVITY * deltaTime;
+
+            // Horizontal movement and collision
+            m_player.shape.move({ m_player.velocity.x * deltaTime, 0.f });
+            sf::FloatRect playerBounds = m_player.shape.getGlobalBounds();
+            for (const auto& platform : m_platforms) {
+                sf::FloatRect platformBounds = platform.getGlobalBounds();
+                std::optional<sf::FloatRect> intersection; // For SFML 3.0 intersection
+                if ((intersection = playerBounds.findIntersection(platformBounds))) {
+                    if (m_player.velocity.x > 0) { // Moving right
+                        m_player.shape.setPosition({
+                            platformBounds.position.x - playerBounds.size.x,
+                            playerBounds.position.y
+                            });
+                    }
+                    else if (m_player.velocity.x < 0) { // Moving left
+                        m_player.shape.setPosition({
+                            platformBounds.position.x + platformBounds.size.x,
+                            playerBounds.position.y
+                            });
+                    }
+                    m_player.velocity.x = 0;
+                    playerBounds = m_player.shape.getGlobalBounds(); // Update bounds after position change
+                }
+            }
+
+            // Vertical movement and collision
+            m_player.onGround = false;
+            m_player.shape.move({ 0.f, m_player.velocity.y * deltaTime });
+            playerBounds = m_player.shape.getGlobalBounds(); // Update bounds before vertical check
+            for (const auto& platform : m_platforms) {
+                sf::FloatRect platformBounds = platform.getGlobalBounds();
+                std::optional<sf::FloatRect> intersection;
+                if ((intersection = playerBounds.findIntersection(platformBounds))) {
+                    if (m_player.velocity.y > 0) { // Falling
+                        m_player.shape.setPosition({
+                            playerBounds.position.x,
+                            platformBounds.position.y - playerBounds.size.y
+                            });
+                        m_player.onGround = true;
+                    }
+                    else if (m_player.velocity.y < 0) { // Jumping
+                        m_player.shape.setPosition({
+                           playerBounds.position.x,
+                           platformBounds.position.y + platformBounds.size.y
+                            });
+                    }
+                    m_player.velocity.y = 0;
+                    playerBounds = m_player.shape.getGlobalBounds(); // Update bounds after position change
+                }
+            }
+
+            // Player fall off screen
+            if (m_player.shape.getPosition().y + m_player.shape.getSize().y > WINDOW_HEIGHT + TILE_SIZE * 2) {
+                m_player.takeDamage();
+                if (m_player.lives > 0) {
+                    m_player.shape.setPosition({ RESPAWN_X, RESPAWN_Y });
+                    m_player.velocity = { 0,0 };
+                }
+            }
+            // Player window boundaries
+            if (m_player.shape.getPosition().x < 0) {
+                m_player.shape.setPosition({ 0, m_player.shape.getPosition().y });
+            }
+            if (m_player.shape.getPosition().x + m_player.shape.getSize().x > WINDOW_WIDTH) {
+                m_player.shape.setPosition({ WINDOW_WIDTH - m_player.shape.getSize().x, m_player.shape.getPosition().y });
+            }
+
+
+            // Update bullets
+            for (size_t i = 0; i < m_bullets.size(); ++i) {
+                m_bullets[i].shape.move({ m_bullets[i].velocity.x * deltaTime, m_bullets[i].velocity.y * deltaTime });
+                bool bulletHitPlatform = false;
+                sf::FloatRect bulletBounds = m_bullets[i].shape.getGlobalBounds();
+                for (const auto& platform : m_platforms) {
+                    std::optional<sf::FloatRect> intersection;
+                    if ((intersection = bulletBounds.findIntersection(platform.getGlobalBounds()))) {
+                        bulletHitPlatform = true;
+                        break;
+                    }
+                }
+
+                if (bulletHitPlatform || m_bullets[i].shape.getPosition().x < -m_bullets[i].shape.getSize().x || m_bullets[i].shape.getPosition().x > WINDOW_WIDTH) {
+                    m_bullets.erase(m_bullets.begin() + i);
+                    --i; // Adjust index after erasing
+                }
+            }
+
+            // Check game over condition
+            if (m_player.lives <= 0) {
+                m_gameOverState = true;
+            }
+
+            // Update UI Text
+            if (m_healthText) m_healthText->setString("Health: " + std::to_string(m_player.health));
+            if (m_livesText) m_livesText->setString("Lives: " + std::to_string(m_player.lives));
+        }
+
+        // --- Drawing ---
+        m_window->clear(COLOR_BACKGROUND);
+        for (const auto& platform : m_platforms) {
+            m_window->draw(platform);
+        }
+        m_window->draw(m_player.shape);
+        for (const auto& bullet : m_bullets) {
+            m_window->draw(bullet.shape);
+        }
+
+        if (m_healthText) m_window->draw(*m_healthText);
+        if (m_livesText) m_window->draw(*m_livesText);
+
+        if (m_gameOverState && m_gameOverText) {
+            m_window->draw(*m_gameOverText);
+        }
+        m_window->display();
+    }
+}
+
 //#include "Game.h"
 //#include <thread>
 //#include <mutex>

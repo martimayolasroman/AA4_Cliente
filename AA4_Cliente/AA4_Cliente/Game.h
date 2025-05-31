@@ -1,4 +1,129 @@
 #pragma once
+
+#include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp> // For sounds, if added later
+#include <SFML/System/Angle.hpp> // For sf::degrees if needed in the future
+#include <iostream>
+#include <vector>
+#include <fstream>
+#include <string>
+#include <sstream>
+#include <optional>
+
+// --- Color Constants ---
+const sf::Color COLOR_BACKGROUND(236, 236, 236);
+const sf::Color COLOR_PLAYER_BLUE(sf::Color::Blue);
+const sf::Color COLOR_BULLET_YELLOW(sf::Color::Red);
+const sf::Color COLOR_PLATFORM_BROWN(139, 69, 19);
+const sf::Color COLOR_DEFAULT_FLOOR_GRAY(100, 100, 100);
+const sf::Color COLOR_TEXT_WHITE(sf::Color::White);
+const sf::Color COLOR_GAMEOVER_RED(sf::Color::Red);
+
+// --- Other Constants ---
+const unsigned int WINDOW_WIDTH = 1024;
+const unsigned int WINDOW_HEIGHT = 768;
+const float TILE_SIZE = 32.0f;
+
+const float PLAYER_SPEED = 200.0f; // pixels per second
+const float JUMP_STRENGTH = 450.0f;
+const float GRAVITY = 1200.0f; // pixels per second^2
+const float PLAYER_WIDTH = TILE_SIZE * 0.9f;
+const float PLAYER_HEIGHT = TILE_SIZE * 1.4f;
+
+const int PLAYER_HEALTH_MAX = 5;
+const int PLAYER_LIVES_MAX = 3;
+const float RESPAWN_X = 100.0f;
+const float RESPAWN_Y = 100.0f;
+
+const float BULLET_SPEED = 500.0f;
+const float BULLET_WIDTH = 10.0f;
+const float BULLET_HEIGHT = 5.0f;
+const float SHOOT_COOLDOWN = 0.5f; // seconds
+
+// Structs
+struct Player {
+    sf::RectangleShape shape;
+    sf::Vector2f velocity;
+    int health;
+    int lives;
+    bool onGround;
+    float shootTimer;
+    bool facingRight; // For bullet direction
+
+    Player() : health(PLAYER_HEALTH_MAX), lives(PLAYER_LIVES_MAX), onGround(false), shootTimer(0.0f), facingRight(true) {
+        shape.setSize({ PLAYER_WIDTH, PLAYER_HEIGHT });
+        shape.setFillColor(COLOR_PLAYER_BLUE);
+        shape.setPosition({ RESPAWN_X, RESPAWN_Y });
+        velocity = { 0, 0 };
+    }
+
+    void takeDamage() {
+        health--;
+        if (health <= 0) {
+            lives--;
+            if (lives > 0) {
+                health = PLAYER_HEALTH_MAX;
+                shape.setPosition({ RESPAWN_X, RESPAWN_Y });
+                velocity = { 0, 0 };
+                std::cout << "Player lost a life! Lives remaining: " << lives << std::endl;
+            }
+            else {
+                std::cout << "GAME OVER!" << std::endl;
+            }
+        }
+        else {
+            std::cout << "Player took damage! Health: " << health << std::endl;
+        }
+    }
+};
+
+struct Bullet {
+    sf::RectangleShape shape;
+    sf::Vector2f velocity;
+
+    Bullet(sf::Vector2f pos, bool facingRight) {
+        shape.setSize({ BULLET_WIDTH, BULLET_HEIGHT });
+        shape.setFillColor(COLOR_BULLET_YELLOW);
+
+        float bulletStartXOffset = facingRight ? PLAYER_WIDTH : -BULLET_WIDTH;
+        shape.setPosition({ pos.x + bulletStartXOffset, pos.y + PLAYER_HEIGHT / 2.f - BULLET_HEIGHT / 2.f });
+
+        velocity.x = facingRight ? BULLET_SPEED : -BULLET_SPEED;
+        velocity.y = 0;
+    }
+};
+
+// Function to load map from .txt file (declaration)
+std::vector<sf::RectangleShape> loadMap(const std::string& filename);
+
+class Game {
+public:
+    Game(sf::RenderWindow* window);
+    ~Game();
+    void run();
+
+private:
+    sf::RenderWindow* m_window;
+    Player m_player;
+    std::vector<sf::RectangleShape> m_platforms;
+    std::vector<Bullet> m_bullets;
+
+    sf::Font m_font;
+    sf::Text* m_healthText;
+    sf::Text* m_livesText;
+    sf::Text* m_gameOverText;
+
+    bool m_gameOverState;
+    sf::Clock m_clock;
+
+    // Potentially private helper methods if needed for run() logic,
+    // but for now, all logic is in run() as per original main().
+    // void processEvents();
+    // void update(float deltaTime);
+    // void render();
+};
+
+
 //#include "Players.h"
 //#include "Button.h"
 //#include "Client.h"

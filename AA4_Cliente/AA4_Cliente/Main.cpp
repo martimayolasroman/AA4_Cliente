@@ -7,6 +7,7 @@
 
 #include "Login.h"
 #include "Lobby.h"
+#include "Game.h"
 
 #define SERVER_PORT 55000
 
@@ -29,7 +30,7 @@ void main() {
 	
 	sf::RenderWindow* window = new sf::RenderWindow(sf::VideoMode({ WIDTH, HEIGHT }), "| Cliente Parchis |");;
 	
-	GameState currentState = GameState::LOGIN;
+	GameState currentState = GameState::GAME;
 
 	Login loginMenu(window);
 	Lobby lobbyMenu(window);
@@ -52,6 +53,10 @@ void main() {
 			currentState = lobbyMenu.Update();
 			break;
 		case GameState::GAME:
+		{
+			Game shooter(window);
+			shooter.run();
+		}
 			/*parchis = new Game(window);*/
 		/*	currentState = parchis->Update();*/
 			break;
