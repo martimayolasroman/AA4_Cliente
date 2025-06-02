@@ -6,7 +6,7 @@
 #include <SFML/Network.hpp>
 
 #include "Login.h"
-#include "Lobby.h"
+
 #include "Game.h"
 #include "SearchMenu.h"
 
@@ -29,12 +29,12 @@ void main() {
 	
 
 	
-	sf::RenderWindow* window = new sf::RenderWindow(sf::VideoMode({ WIDTH, HEIGHT }), "| Cliente Parchis |");;
+	sf::RenderWindow* window = new sf::RenderWindow(sf::VideoMode({ WIDTH, HEIGHT }), "| Cliente Shooter |");;
 	
 	GameState currentState = GameState::LOGIN;
 
 	Login loginMenu(window);
-	Lobby lobbyMenu(window);
+	
 	SearchGameMenu searchMenu(window);
 	
 	/*Game *parchis;*/

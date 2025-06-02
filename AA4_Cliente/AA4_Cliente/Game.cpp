@@ -58,7 +58,7 @@ Game::Game(sf::RenderWindow* window)
         std::cerr << "Please ensure '" << fontFileName << "' is in the same directory as the executable." << std::endl;
 
         // Create default map.txt if it doesn't exist or is empty, when font load fails
-        std::ofstream defaultMap("map.txt", std::ios::app); // Open in append mode
+        std::ofstream defaultMap("Data/map.txt", std::ios::app); // Open in append mode
         if (defaultMap.is_open()) {
             defaultMap.seekp(0, std::ios_base::end); // Go to the end of the file
             if (defaultMap.tellp() == 0) { // Check if file is empty
@@ -84,7 +84,7 @@ Game::Game(sf::RenderWindow* window)
             m_platforms[0].getSize() == sf::Vector2f(WINDOW_WIDTH, TILE_SIZE) &&
             m_platforms[0].getPosition() == sf::Vector2f(0.f, WINDOW_HEIGHT - TILE_SIZE) &&
             m_platforms[0].getFillColor() == COLOR_DEFAULT_FLOOR_GRAY) {
-            m_platforms = loadMap("map.txt"); // Attempt to reload if it was just the default floor from initial loadMap failure
+            m_platforms = loadMap("Data/map.txt"); // Attempt to reload if it was just the default floor from initial loadMap failure
         }
     }
     else {

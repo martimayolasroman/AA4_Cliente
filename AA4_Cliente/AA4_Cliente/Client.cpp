@@ -9,6 +9,7 @@ enum  PacketType
     C_REQUEST_REGISTER = 2,
     C_REQUEST_MATCHMAKING_FRIENDLY = 3,
     C_MAP_RECEIVED_ACK = 4,
+    C_PLAYER_INPUT = 5,
 
     // Servidor a Cliente
     S_MAP_DATA = 100,
@@ -18,10 +19,14 @@ enum  PacketType
     S_REGISTER_FAIL = 104,
     S_ADDED_TO_MATCHMAKING_QUEUE = 105,
     S_MATCH_FOUND = 106,
-    S_ERROR_GENERAL = 107, // Para errores genéricos
+    S_GAME_STATE = 107,
+    S_ERROR_GENERAL = 108, // Para errores genéricos
 
 
     UNKNOWN = 255
+
+  
+   
 };
 
 
@@ -53,11 +58,142 @@ inline sf::Packet& operator << (sf::Packet& packet, PacketType tipo) {
 }
 
 
-Client::Client() 
+void Client::connectToGameServerUDP()
 {
-    
-    connected = false;
-    
+
+    // Clientsocket.disconnect();
+
+    if (gameUdpSocket.bind(m_myUdpPortForGame) != sf::Socket::Status::Done) {
+        std::cerr << "[Client-UDP] Error al enlazar socket UDP al puerto local: " << m_myUdpPortForGame << std::endl;
+        m_isConnectedToGameServer = false;
+        
+        return;
+    }
+    gameUdpSocket.setBlocking(false);
+    m_isConnectedToGameServer = true;
+    std::cout << "[Client-UDP] Socket UDP enlazado al puerto local " << m_myUdpPortForGame
+        << ". Listo para comunicarse con GameServer en "
+        << m_gameServerIp << ":" << m_gameServerUdpPort << std::endl;
+
+    // Inicializar posiciones (o esperar al primer S_GAME_STATE)
+    myPlayerPosition = sf::Vector2f(100, 100); // Posición por defecto o de spawn
+    opponentPlayerPosition = sf::Vector2f(200, 100); // Posición por defecto
+
+
+}
+
+void Client::runGameplayLoop()
+{
+    if (!m_isConnectedToGameServer) {
+        return;
+    }
+
+    // 1. Enviar inputs (esto se llamaría desde la lógica de juego cuando el jugador actúe)
+    // Ejemplo: sendPlayerInput(currentMoveDirection);
+    // Lo pongo aquí solo para ilustrar, pero el envío real se haría en respuesta al input del jugador.
+
+    // 2. Recibir estado del juego
+    sf::Packet gamePacket;
+    std::optional<sf::IpAddress> senderIp;
+    unsigned short senderPort;
+
+    // gameUdpSocket es no bloqueante
+    if (gameUdpSocket.receive(gamePacket, senderIp, senderPort) == sf::Socket::Status::Done) {
+        // Verificar que el paquete viene del GameServer esperado
+        if (senderIp.value().toString() == m_gameServerIp && senderPort == m_gameServerUdpPort) {
+            processGamePacket(gamePacket);
+        }
+        else {
+            std::cout << "[Client-UDP] Paquete UDP recibido de una fuente inesperada: "
+                << senderIp.value() << ":" << senderPort << std::endl;
+        }
+    }
+
+
+
+
+}
+
+void Client::sendPlayerInput(float moveDir, bool wantsToShoot)
+{
+
+    if (!m_isConnectedToGameServer) return;
+
+    sf::Packet inputPacket;
+    inputPacket <<C_PLAYER_INPUT << moveDir << wantsToShoot;
+
+    // Enviar al GameServer
+    if (gameUdpSocket.send(inputPacket, sf::IpAddress::resolve(m_gameServerIp).value(), m_gameServerUdpPort) != sf::Socket::Status::Done) {
+        std::cerr << "[Client-UDP] Error enviando paquete de input." << std::endl;
+    }
+}
+
+void Client::processGamePacket(sf::Packet& packet)
+{
+    PacketType type;
+    if (!(packet >> type)) {
+        std::cerr << "[Client-UDP] Error leyendo GamePacketType del GameServer." << std::endl;
+        return;
+    }
+
+    if (type == S_GAME_STATE) {
+        // Asumimos que el servidor envía:
+        // packet << S_GAME_STATE
+        //        << p1_pos.x << p1_pos.y << p1_health << p1_lives
+        //        << p2_pos.x << p2_pos.y << p2_health << p2_lives;
+        // Y el cliente necesita saber cuál es él (podría ser por orden o con un ID)
+        // Por ahora, asumimos que el servidor siempre envía "tu estado" primero, luego "el del oponente"
+        // O, el servidor podría identificar los estados con un ID de jugador.
+        // Para este ejemplo, vamos a deserializar directamente a myPlayer y opponentPlayer.
+        // NECESITAS UNA FORMA DE SABER CUÁL ES CUÁL.
+        // Por ejemplo, si el servidor sabe tu IP:Puerto, podría enviar tu estado específico.
+        // O si te asignó un ID (0 o 1) al inicio de la partida.
+        // Por ahora, una suposición simple:
+        float p1x, p1y, p2x, p2y;
+        int p1h, p1l, p2h, p2l;
+
+        if (packet >> p1x >> p1y >> p1h >> p1l >> p2x >> p2y >> p2h >> p2l) {
+            // ¿Cómo sé si soy P1 o P2 según el servidor?
+            // Por ahora, actualicemos ambos y la clase Game decidirá cómo dibujar.
+            // Idealmente, el servidor te dice "tú eres el jugador con estos datos..."
+            // O tu cliente siempre renderiza "myPlayer" en el centro y el oponente relativo a eso.
+
+            // Suposición muy básica: si mi puerto UDP local coincide con el que
+            // el servidor de servicios dijo que era el "player1UdpPort" en la notificación
+            // original al servidor dedicado, entonces soy P1 para el servidor dedicado.
+            // Esto es un poco enrevesado. Una ID de jugador sería mejor.
+
+            // Simplificación: El Game.cpp tomará myPlayerPosition y opponentPlayerPosition
+            // y los renderizará. El cliente debe mantenerlos actualizados.
+            // Aquí, el servidor envía los datos de los dos jugadores. El cliente
+            // tiene que saber cuál es "yo" y cuál es "el otro".
+            // Para el ejemplo, llenaremos myPlayer y opponentPlayer.
+            // La clase Game los usará.
+            myPlayerPosition = { p1x, p1y }; // OJO: Necesitas saber cuál es cuál.
+            myPlayerHealth = p1h;
+            myPlayerLives = p1l;
+            opponentPlayerPosition = { p2x, p2y };
+            opponentPlayerHealth = p2h;
+            opponentPlayerLives = p2l;
+
+            //std::cout << "[Client-UDP] Estado recibido: P1(" << p1x << "," << p1y << ") P2(" << p2x << "," << p2y << ")" << std::endl;
+
+        }
+        else {
+            std::cerr << "[Client-UDP] Error deserializando S_GAME_STATE." << std::endl;
+        }
+    }
+    else {
+        std::cerr << "[Client-UDP] Tipo de GamePacket desconocido: " << static_cast<int>(type) << std::endl;
+    }
+
+
+}
+
+Client::Client():connected(false),myPort(0),m_mapReceived(false),loginOk(false),RegisterOk(false)
+{
+    mapFilePath = "Data/map.txt"; // Asegurar consistencia
+   
 }
 
 
@@ -96,23 +232,19 @@ bool Client::connectToServer(unsigned short port)
 
 void Client::run()
 {
+    if (!connected) return; // No hacer nada si no estamos conectados al servidor de servicios
 
-
-   // std::cout << std::endl << "//////////////HAGO CLIENT RUN!" << std::endl;
-
-	sf::Packet incomingPacked;
-	if (Clientsocket.receive(incomingPacked) == sf::Socket::Status::Done) {
-		//std::cout << "Paquet rebut!" << std::endl;
-		processPacket(incomingPacked);
-	}
-
-	
-
-	//Ensenyar Menu de Login / Register
-
-   // mainMenu.Update();  
-
-
+    sf::Packet incomingPacket;
+    // Clientsocket (TCP) debe ser no bloqueante para que esto no congele la UI
+    if (Clientsocket.receive(incomingPacket) == sf::Socket::Status::Done) {
+        processPacket(incomingPacket); // Procesa paquetes del servidor de servicios
+    }
+    else if (Clientsocket.receive(incomingPacket) == sf::Socket::Status::Disconnected) {
+        std::cout << "[Client] Desconectado del servidor de servicios." << std::endl;
+        connected = false;
+        // Aquí podrías limpiar estados relacionados con el servidor de servicios
+        m_isInMatchmakingQueue = false;
+    }
 
 }
 
@@ -128,10 +260,6 @@ bool Client::loginAction(std::string nick, std::string pass)
         m_hasLoginResponse = false; // Resetear para esperar nueva respuesta
         return sendPacket(packet); // Devuelve si el envío fue exitoso
 
-       /* Clientsocket.setBlocking(true);
-        run();
-        Clientsocket.setBlocking(false);
-        return loginOk;*/
    
 }
 
@@ -145,82 +273,12 @@ bool Client::RegisterAction(std::string nick, std::string pass)
         m_hasRegisterResponse = false; // Resetear para esperar nueva respuesta
         return sendPacket(packet);
 
-       /* Clientsocket.setBlocking(true);
-        run();
-        Clientsocket.setBlocking(false);
-        return RegisterOk;*/
 }
 
 bool Client::sendPacket(sf::Packet& packet)
 {
     return Clientsocket.send(packet) == sf::Socket::Status::Done;
 }
-
-void Client::startGame(sf::Packet& packet)
-{
-
-    std::cout << "[CLIENT] START_GAME rebut!: "  << std::endl;
-    peers.clear();
-
-    std::int32_t numPeers;
-    packet >> numPeers;
-
-    if (!(packet >> numPeers)) {
-        std::cerr << "[CLIENT] Error llegint numPeers!" << std::endl;
-        return;
-    }
-
-   // std::cout << "[CLIENT] Nombre de companys rebuts: " << numPeers << std::endl;
-
-    int color;
-    if (!(packet >> color)) {
-        std::cerr << "[CLIENT] Error llegint color!" << std::endl;
-        return;
-    }
-    ClientColor = color;
-    std::cerr << "[CLIENT] Color: " << color << std::endl;
-
-
-    for (int i = 0; i < numPeers; i++) {
-        std::string nick, ipStr;
-        unsigned short port;
-        
-       
-
-      //  packet >> nick >> ipStr >> port;
-
-
-        if (!(packet >> nick)) {
-            std::cerr << "[CLIENT] Error llegint nickname!" << std::endl;
-            return;
-        }
-        if (!(packet >> ipStr)) {
-            std::cerr << "[CLIENT] Error llegint IP!" << std::endl;
-            return;
-        }
-        if (!(packet >> port)) {
-            std::cerr << "[CLIENT] Error llegint port!" << std::endl;
-            return;
-        }
-        
-
-        
-
-        PeerInfo peer;
-        peer.nickname = nick;
-        peer.ip = ipStr;
-        peer.port = port;
-
-        peers.push_back(peer);
-
-        std::cout << " - Company " << i + 1 << ": " << nick
-            << " (" << ipStr << ":" << port << ")" << std::endl;
-    }
-
- 
-
-}
-
 
 
 void Client::processPacket(sf::Packet packet)
@@ -276,19 +334,34 @@ void Client::processPacket(sf::Packet packet)
     case S_MATCH_FOUND:
         {
         std::cout << "[CLIENT] Partida encontrada! Conectar a GameServer en " << std::endl;
-        //std::string gameServerIp;
-        //unsigned short gameServerPort;
-        //if (packet >> gameServerIp >> gameServerPort) {
-        //    std::cout << "[CLIENT] Partida encontrada! Conectar a GameServer en " << gameServerIp << ":" << gameServerPort << std::endl;
-        //    m_gameServerIp = gameServerIp;
-        //    m_gameServerPort = gameServerPort;
-        //    m_matchFound = true; // Nueva flag
-        //    // Aquí el cliente debería cambiar de estado para desconectarse de este servidor
-        //    // y conectarse al GameServer.
-        //}
-        //else {
-        //    std::cerr << "[CLIENT] Error leyendo datos de S_MATCH_FOUND." << std::endl;
-        //}
+        std::string gameServerIpStr;
+        unsigned short gameServerUdpPortVal;
+        unsigned short myUdpPortForGameVal; // Puerto que este cliente debe usar
+        // El servidor de servicios debe enviar estos tres datos:
+            // packet << S_MATCH_FOUND << gameServerIp.toString() << gameServerUdpPort << client1UdpPortToUse;
+            // packet << S_MATCH_FOUND << gameServerIp.toString() << gameServerUdpPort << client2UdpPortToUse;
+        if (packet >> gameServerIpStr>> gameServerUdpPortVal >> myUdpPortForGameVal) {
+            std::cout << "[CLIENT] Partida encontrada! Conectar a GameServer "<< std::endl;
+     
+
+            m_gameServerIp = gameServerIpStr;
+            m_gameServerUdpPort = gameServerUdpPortVal;
+            m_myUdpPortForGame = myUdpPortForGameVal;
+            m_matchFound = true;
+            m_isInMatchmakingQueue = false; // Ya no estamos en cola
+            // Aquí el cliente debería cambiar de estado para desconectarse de este servidor
+            // y conectarse al GameServer.
+
+            std::cout << "[CLIENT] Partida encontrada! GameServer en "
+                << m_gameServerIp << ":" << m_gameServerUdpPort
+                << ". Usaré mi puerto UDP local: " << m_myUdpPortForGame << std::endl;
+
+            
+            connectToGameServerUDP();
+        }
+        else {
+            std::cerr << "[CLIENT] Error leyendo datos de S_MATCH_FOUND." << std::endl;
+        }
     
         break;
     
@@ -300,67 +373,7 @@ void Client::processPacket(sf::Packet packet)
 
 }
 
-bool Client::isGameReady() const
-{
-    return gameReady;
-}
 
-void Client::setGameReady(bool ready)
-{
-    processedMoveIds.clear();
-    currentMoveId = 0;
-    gameReady = ready;
-}
-
-
-
-void Client::receiveMoveFromPeer(sf::Packet& packet)
-{
-
-    int moveId, color, idcasilla, numerMoves;
-  
-    packet >>moveId  >> color >> idcasilla >> numerMoves;
-
-
-    if (processedMoveIds.count(moveId) > 0) {
-       // std::cout << "[CLIENT] Moviment duplicat ignorant (ID=" << moveId << ")" << std::endl;
-        return;
-    }
-
-    processedMoveIds.insert(moveId);
-
-    std::cout << "--- Move rebut de un peer (ID=" << moveId << "): "
-        << "color=" << color
-        << ", idCasella=" << idcasilla
-        << ", numberMoves=" << numerMoves << std::endl;
-
-
-    currentMoveId++;
-    movement = std::make_tuple(color, idcasilla, numerMoves);
-    MoveReceived = true;
-  
-}
-
-bool Client::isMoveReceived()
-{
-    if (MoveReceived){
-        MoveReceived = false;
-        return true;
-    }
-    return MoveReceived;
-}
-
-std::tuple<int, int, int> Client::getMovement()
-{
-   // MoveReceived = false;
-   
-    return movement;
-}
-
-int Client::getColor()
-{
-    return ClientColor;
-}
 
 std::string Client::getNickname()
 {
@@ -368,24 +381,6 @@ std::string Client::getNickname()
 }
 
 
-
-
-
-void Client::reconnectToServer()
-{
-    if (Clientsocket.connect(SERVER_IP, SERVER_PORT) == sf::Socket::Status::Done)
-    {
-        Clientsocket.setBlocking(false);
-        connected = true;
-        std::cout << "[CLIENT] Reconnectat al servidor bootstrap correctament." << std::endl;
-    }
-    else
-    {
-        std::cerr << "[CLIENT] Error reconnectant al servidor!" << std::endl;
-        connected = false;
-    }
-
-}
 
 bool Client::requestMatchmakingFriendly()
 {

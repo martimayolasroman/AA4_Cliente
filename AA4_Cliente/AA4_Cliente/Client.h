@@ -9,7 +9,12 @@
 
 #define WIDTH 1280
 #define HEIGHT 720
-#define SERVER_PORT 55000
+
+
+
+
+
+
 
 class Client
 {
@@ -27,15 +32,35 @@ private:
 	bool m_matchFound = false;
 	std::string m_gameServerIp;
 	unsigned short m_gameServerPort = 0;
+	unsigned short m_gameServerUdpPort = 0;
+	unsigned short m_myUdpPortForGame = 0; // Puerto UDP local que este cliente usará
+
+	sf::UdpSocket gameUdpSocket;
+	std::atomic<bool> m_isConnectedToGameServer{ false };
 
 	std::string m_mapData;
 	bool m_mapReceived = false;
+
+	// --- Gameplay Loop (UDP) ---
+	void connectToGameServerUDP(); // Intenta conectar (bind) y prepararse para UDP
+	void runGameplayLoop();    // Bucle para enviar inputs y recibir estado del juego
+	void sendPlayerInput(float moveDir, bool wantsToShoot);
+	void processGamePacket(sf::Packet& packet); // Procesa S_GAME_STATE
+
+	// Datos del estado del juego recibidos del servidor
+	// Podrías tener structs para tu jugador y el oponente
+	sf::Vector2f myPlayerPosition;
+	int myPlayerHealth=3;
+	int myPlayerLives=3;
+	sf::Vector2f opponentPlayerPosition;
+	int opponentPlayerHealth=3;
+	int opponentPlayerLives=3;
+	// ---------------------
 
 
 	Client();
 
 	bool sendPacket(sf::Packet& packet);
-	void startGame(sf::Packet& packet);
 
 	void processPacket(sf::Packet packetType);
 
@@ -49,29 +74,15 @@ private:
 	std::vector<sf::TcpSocket*> peerSockets;
 	sf::SocketSelector selector;
 	
-	
-	int currentMoveId = 0;
-	std::set<int> processedMoveIds;
-	
 
 	unsigned short myPort; 
-	bool gameReady = false;
 
-	int ClientColor = 0;
+
+
 	std::string clientNick;
 
 
 public:
-
-	struct PeerInfo {
-		std::string nickname;
-		std::string ip;
-		unsigned short port;
-	};
-
-	std::vector<PeerInfo> peers;
-
-
 
 		static Client* getInstance();
 		
@@ -80,24 +91,10 @@ public:
 
 		bool loginAction(std::string nick, std::string pass);
 		bool RegisterAction(std::string nick, std::string pass);
-	
 
-		bool isGameReady() const;
-		void setGameReady(bool ready);
 
-		
-		
-		void receiveMoveFromPeer(sf::Packet& packet);
-		bool MoveReceived = false;
-		bool isMoveReceived();
-		std::tuple<int, int, int> movement;
-		std::tuple<int, int, int> getMovement();
-		int getColor();
 		std::string getNickname();
 		
-		
-		void reconnectToServer();
-
 
 		bool requestMatchmakingFriendly();
 		std::string mapFilePath = "Data/map.txt";
@@ -114,8 +111,7 @@ public:
 		unsigned short getGameServerPort() const { return m_gameServerPort; }
 		bool getRegisterStatus() const { return RegisterOk; }
 		void resetRegisterResponse() { m_hasRegisterResponse = false; }
-		//MainMenu mainMenu;
-		//Game parchis;
+
 		
 	//	sf::RenderWindow window;
 		sf::Packet packet;
