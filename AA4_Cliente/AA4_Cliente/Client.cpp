@@ -239,6 +239,7 @@ void Client::processPacket(sf::Packet packet)
                 m_mapData = receivedMapContent;
                 m_mapReceived = true;
                 std::cout << "[CLIENT] Mapa recibido del servidor. Tamaño: " << m_mapData.length() << " bytes." << std::endl;
+                ReadWriteMapReceived(receivedMapContent);
                // std::cout << receivedMapContent << std::endl;
             }
             else {
@@ -397,6 +398,26 @@ bool Client::requestMatchmakingFriendly()
     }
     std::cerr << "[CLIENT] Error enviando matchmaking." << std::endl;
     return false;
+}
+
+bool Client::ReadWriteMapReceived(std::string& receivedMapContent)
+{
+
+    std::ofstream mapFile(mapFilePath); // Abre el archivo para escritura (sobrescribe si existe)
+   
+
+    if (mapFile.is_open()) {
+        mapFile << receivedMapContent; // Escribe el string del mapa en el archivo
+        mapFile.close();
+        std::cout << "[Client] Mapa guardado correctamente en: " << mapFilePath << std::endl;
+        return true;
+    }
+    else {
+        std::cerr << "[Client] Error: No se pudo abrir el archivo para guardar el mapa: " << mapFilePath << std::endl;
+        return false;
+    }
+
+
 }
 
 

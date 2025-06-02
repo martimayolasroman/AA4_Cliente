@@ -74,7 +74,7 @@ GameState Login::Update()
 			Client::getInstance()->resetLoginResponse(); // Consumir la respuesta
 			if (success) {
 				std::cout << "[LoginUI] Login exitoso, cambiando a LOBBY." << std::endl;
-				return GameState::LOBBY;
+				return GameState::SEARCH;
 			}
 			else {
 				std::cout << "[LoginUI] Login fallido." << std::endl;
@@ -88,7 +88,7 @@ GameState Login::Update()
 			Client::getInstance()->resetRegisterResponse();
 			if (success) {
 				std::cout << "[LoginUI] Registro exitoso, cambiando a LOBBY." << std::endl;
-				return GameState::LOBBY; // O directamente al lobby si el servidor auto-loguea
+				return GameState::SEARCH; // O directamente al lobby si el servidor auto-loguea
 			}
 			else {
 				std::cout << "[LoginUI] Registro fallido." << std::endl;
@@ -100,7 +100,7 @@ GameState Login::Update()
 
 		while (const std::optional event = window->pollEvent()) {
 			GameState state = EventHandler(*event); // Procesar input del usuario
-			if (state != GameState::LOGIN) {
+			if (state != GameState::SEARCH) {
 				return state; // Si EventHandler cambia el estado (ej. EXIT)
 			}
 		}

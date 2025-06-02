@@ -4,6 +4,7 @@
 #include "iostream"
 //#include "Game.h"
 #include <set>
+#include <fstream>
 
 
 #define WIDTH 1280
@@ -99,7 +100,8 @@ public:
 
 
 		bool requestMatchmakingFriendly();
-
+		std::string mapFilePath = "Data/map.txt";
+		bool  ReadWriteMapReceived(std::string& receivedMapContent);
 
 		bool hasReceivedMap() const { return m_mapReceived; }
 		const std::string& getMapData() const { return m_mapData; }

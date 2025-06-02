@@ -50,7 +50,7 @@ Game::Game(sf::RenderWindow* window)
         std::cout << "Server connection failed. Starting local game." << std::endl;
     }
 
-    m_platforms = loadMap("map.txt");
+    m_platforms = loadMap("Data/map.txt");
 
     std::string fontFileName = "your_font.ttf"; // <<< REMEMBER TO CHANGE THIS
     if (!m_font.openFromFile(fontFileName)) {

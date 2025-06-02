@@ -31,7 +31,7 @@ void main() {
 	
 	sf::RenderWindow* window = new sf::RenderWindow(sf::VideoMode({ WIDTH, HEIGHT }), "| Cliente Parchis |");;
 	
-	GameState currentState = GameState::SEARCH;
+	GameState currentState = GameState::LOGIN;
 
 	Login loginMenu(window);
 	Lobby lobbyMenu(window);
@@ -52,9 +52,9 @@ void main() {
 		case GameState::LOGIN:
 			currentState = loginMenu.Update();
 			break;
-		case GameState::LOBBY:
+		/*case GameState::LOBBY:
 			currentState = lobbyMenu.Update();
-			break;
+			break;*/
 		case GameState::SEARCH:
 			currentState = searchMenu.Update();
 			break;

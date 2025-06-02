@@ -101,6 +101,7 @@ void SearchGameMenu::setWindow(sf::RenderWindow* win)
 void SearchGameMenu::onCasualMatchmakingPressed()
 {
     std::cout << "Boton 'Casual Matchmaking' pulsado." << std::endl;
+    Client::getInstance()->requestMatchmakingFriendly();
     // Aquí iría la lógica para iniciar la búsqueda de partida,
     // como enviar un mensaje al servidor a través de Client::getInstance()
     // Client::getInstance()->sendSearchCasualMatchmakingRequest(); // Ejemplo
