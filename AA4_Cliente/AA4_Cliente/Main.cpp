@@ -31,7 +31,7 @@ void main() {
 	
 	sf::RenderWindow* window = new sf::RenderWindow(sf::VideoMode({ WIDTH, HEIGHT }), "| Cliente Shooter |");;
 	
-	GameState currentState = GameState::LOGIN;
+	GameState currentState = GameState::SEARCH;
 
 	Login loginMenu(window);
 	

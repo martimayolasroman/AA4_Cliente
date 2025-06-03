@@ -27,10 +27,10 @@ private:
 
     sf::Font font;
     sf::Text* title;
-    std::string titleString = "PARCHIS";
+    std::string titleString = "The DUCK Shooter";
     sf::Vector2f titlePosition;
     int titleYPos = 70;
-    int titleTextSize = 100;
+    int titleTextSize = 70;
 
     std::string fontsPath = "Assets/Fonts/";
     std::string fontName = "Straw Milky.otf";

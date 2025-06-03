@@ -98,10 +98,16 @@ void SearchGameMenu::setWindow(sf::RenderWindow* win)
     }
 }
 
-void SearchGameMenu::onCasualMatchmakingPressed()
+GameState SearchGameMenu::onCasualMatchmakingPressed()
 {
-    std::cout << "Boton 'Casual Matchmaking' pulsado." << std::endl;
-    Client::getInstance()->requestMatchmakingFriendly();
+    if (Client::getInstance()->requestMatchmakingFriendly()) {
+        return GameState::GAME;
+    }
+
+    std::cout << "Error al Buscar Partida." << std::endl;
+    return GameState::GAME; // TODO Quitar esto 
+
+
     // Aquí iría la lógica para iniciar la búsqueda de partida,
     // como enviar un mensaje al servidor a través de Client::getInstance()
     // Client::getInstance()->sendSearchCasualMatchmakingRequest(); // Ejemplo
@@ -116,7 +122,7 @@ GameState SearchGameMenu::EventHandler(const sf::Event& event)
 
     if (casualMatchmakingButton && casualMatchmakingButton->handleEvent(event, *window)) {
         // El botón fue presionado
-        onCasualMatchmakingPressed();
+        return onCasualMatchmakingPressed();
         // Decidir qué GameState devolver. Podría ser el mismo para permanecer,
         // o uno nuevo si la acción del botón implica un cambio inmediato de estado
         // que no dependa de una respuesta del servidor.

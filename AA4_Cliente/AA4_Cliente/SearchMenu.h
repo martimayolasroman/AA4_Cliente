@@ -43,7 +43,7 @@ private:
 
 
     // Función que se llamará al pulsar el botón
-    void onCasualMatchmakingPressed();
+    GameState onCasualMatchmakingPressed();
 
     // GameState EventHandler(const sf::Event& event); // Cambiado el tipo de retorno si es necesario, o mantenido si GameState se usa de forma genérica
     GameState EventHandler(const sf::Event& event);
