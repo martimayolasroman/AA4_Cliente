@@ -41,16 +41,16 @@ std::vector<sf::RectangleShape> Game::loadMap(const std::string& filename) {
 
 bool Game::loadGameAssets()
 {
-    std::string playerTexturePath = "Assets/Sprites/player_sprite.png"; // ¡CAMBIA ESTA RUTA!
+    std::string playerTexturePath = "Assets/Sprites/player_sprite.png"; 
     if (!m_playerTexture.loadFromFile(playerTexturePath)) {
         std::cerr << "[Game] ERROR: No se pudo cargar la textura del jugador desde: " << playerTexturePath << std::endl;
         return false;
     }
-    m_playerTexture.setSmooth(true); // Opcional, para mejor apariencia al escalar
+    m_playerTexture.setSmooth(true); 
 
-    // Si el oponente usa la misma textura:
+    
     m_player.setTexture(m_playerTexture);
-    m_opponentPlayer.setTexture(m_playerTexture); // Ambos usan la misma textura
+    m_opponentPlayer.setTexture(m_playerTexture);
 
 
     m_player.sprite->setColor(sf::Color::Yellow);
@@ -78,7 +78,7 @@ Game::Game(sf::RenderWindow* window, Client* client_instance)
     m_waitingText(nullptr),
     m_gameOverState(false),
     m_currentMoveDirection(0.f),
-    m_jumpRequestedThisFrame(false), // <--- NUEVO: Inicializar
+    m_jumpRequestedThisFrame(false), 
     m_accumulatedTimeForPrediction(0.f)
 {
     if (!m_client) {
@@ -88,7 +88,7 @@ Game::Game(sf::RenderWindow* window, Client* client_instance)
 
     if (!loadGameAssets()) {
         std::cerr << "[Game] Error al cargar assets. El juego puede no verse correctamente." << std::endl;
-        // Puedes decidir cerrar el juego o continuar con sprites vacíos/fallback.
+        
     }
 
 
@@ -139,7 +139,7 @@ Game::~Game() {
 }
 
 // Lógica de movimiento/física que se usará para predicción y re-simulación
-void Game::applyPlayerMovement(Player& player, float moveDirInput, bool jumpRequestedThisTick, float deltaTime) { // <--- MODIFICADO
+void Game::applyPlayerMovement(Player& player, float moveDirInput, bool jumpRequestedThisTick, float deltaTime) { 
     // Aplicar movimiento horizontal
     if (moveDirInput < 0) {
         player.velocity.x = -PLAYER_SPEED; player.facingRight = false;
@@ -152,7 +152,7 @@ void Game::applyPlayerMovement(Player& player, float moveDirInput, bool jumpRequ
     }
 
     // Aplicar salto si se solicitó y el jugador está en el suelo (predicción cliente)
-    if (jumpRequestedThisTick && player.onGround) { // <--- NUEVO: Procesar solicitud de salto
+    if (jumpRequestedThisTick && player.onGround) {
         player.velocity.y = -JUMP_STRENGTH;
         player.onGround = false;
     }
@@ -206,7 +206,7 @@ void Game::applyPlayerMovement(Player& player, float moveDirInput, bool jumpRequ
     // Límites de pantalla (ajuste si el jugador sale de los límites horizontales)
     if (player.sprite->getPosition().x < 0.f) { player.sprite->setPosition({ 0.f, player.sprite->getPosition().y }); }
     if (player.sprite->getPosition().x + playerBounds.size.x > WINDOW_WIDTH) { player.sprite->setPosition({ WINDOW_WIDTH - playerBounds.size.x, player.sprite->getPosition().y }); }
-    // Considerar límites Y también para caídas mortales o techos si es necesario
+   
 }
 
 // RECONCILIACIÓN SIMPLE: AJUSTAR POSICIÓN, VELOCIDAD Y ONGROUND
@@ -229,7 +229,7 @@ void Game::reconcilePlayer() {
     bool velocityDiffers = (m_player.velocity != m_client->getMyPlayerServerVelocity());
     bool onGroundDiffers = (m_player.onGround != m_client->getMyPlayerOnGround());
 
-    if (distance > RECONCILIATION_THRESHOLD || velocityDiffers || onGroundDiffers) { // <--- MODIFICADO: Reconciliar también por velocidad/onGround
+    if (distance > RECONCILIATION_THRESHOLD || velocityDiffers || onGroundDiffers) {
         std::cout << "[Game RECONCILE - SIMPLE] DISCREPANCY! Snapping player to server state. Distance: " << distance
             << " VelocityDiff: " << (velocityDiffers ? "YES" : "NO")
             << " OnGroundDiff: " << (onGroundDiffers ? "YES" : "NO") << std::endl;
@@ -242,8 +242,8 @@ void Game::reconcilePlayer() {
             << ") OnGround: " << (m_player.onGround ? "True" : "False") << std::endl;
 
         m_player.sprite->setPosition(serverPosition);
-        m_player.velocity = m_client->getMyPlayerServerVelocity(); // <--- NUEVO: Ajustar velocidad
-        m_player.onGround = m_client->getMyPlayerOnGround();     // <--- NUEVO: Ajustar onGround
+        m_player.velocity = m_client->getMyPlayerServerVelocity();
+        m_player.onGround = m_client->getMyPlayerOnGround();     
 
         //std::cout << "  Player state AFTER snap: Pos(" << m_player.shape.getPosition().x << "," << m_player.shape.getPosition().y
         //    << ") Vel(" << m_player.velocity.x << "," << m_player.velocity.y
@@ -251,7 +251,7 @@ void Game::reconcilePlayer() {
     }
 }
 
-// GAME::RUN (copiado de tu versión anterior, con llamadas a reconcilePlayer y applyPlayerMovement)
+
 void Game::run() {
     if (!m_client || !m_window) {
         std::cerr << "[Game] Error: Client o Window no proporcionado a Game::run(). Saliendo." << std::endl;
@@ -286,16 +286,19 @@ void Game::run() {
                         newMoveDirectionInput = 1.f;
                     }
                     if (keyPressed->code == sf::Keyboard::Key::W || keyPressed->code == sf::Keyboard::Key::Up || keyPressed->code == sf::Keyboard::Key::Space) {
-                        m_jumpRequestedThisFrame = true; // <--- NUEVO: Activar flag de salto
+                        m_jumpRequestedThisFrame = true; 
                     }
-                    // if (keyPressed->code == sf::Keyboard::Key::Enter) shootPressedThisFrame = true; // Ejemplo de disparo
+                   /* if (keyPressed->code == sf::Keyboard::Key::E ) {
+                        m_client->sendPlayerTaunt();
+                    }*/
+                    // if (keyPressed->code == sf::Keyboard::Key::Enter) shootPressedThisFrame = true; //  disparo
                 }
                 if (const auto* keyReleased = event.getIf<sf::Event::KeyReleased>()) {
                     if (((keyReleased->code == sf::Keyboard::Key::A || keyReleased->code == sf::Keyboard::Key::Left) && newMoveDirectionInput < 0) ||
                         ((keyReleased->code == sf::Keyboard::Key::D || keyReleased->code == sf::Keyboard::Key::Right) && newMoveDirectionInput > 0)) {
                         newMoveDirectionInput = 0.f;
                     }
-                    // No resetear m_jumpRequestedThisFrame en keyReleased, ya que es un evento de un solo disparo por pulsación
+                    
                 }
             }
         }
@@ -310,7 +313,7 @@ void Game::run() {
                 m_interpolationRenderClock.restart();
                 if (m_waitingText && m_fontLoaded) m_waitingText->setString("Partida Encontrada!");
                 m_player.sprite->setPosition(m_client->getLastServerConfirmedMyPlayerPosition());
-                // <--- NUEVO: Inicializar velocidad y onGround al inicio del juego con valores del servidor
+               
                 m_player.velocity = m_client->getMyPlayerServerVelocity();
                 m_player.onGround = m_client->getMyPlayerOnGround();
             }
@@ -334,11 +337,11 @@ void Game::run() {
         if (m_gameHasStarted && !m_gameOverState) {
             while (m_accumulatedTimeForPrediction >= FIXED_DELTA_TIME) {
                 // Pasar la solicitud de salto a applyPlayerMovement para la predicción local
-                applyPlayerMovement(m_player, m_currentMoveDirection, m_jumpRequestedThisFrame, FIXED_DELTA_TIME); // <--- MODIFICADO: Pasar jumpRequestedThisFrame
+                applyPlayerMovement(m_player, m_currentMoveDirection, m_jumpRequestedThisFrame, FIXED_DELTA_TIME); 
 
                 if (m_client->isConnectedToGameServer()) {
                     // Enviar la solicitud de salto al servidor
-                    m_client->sendPlayerInput(m_currentMoveDirection, shootPressedThisFrame, m_jumpRequestedThisFrame); // <--- MODIFICADO: Enviar jumpRequestedThisFrame
+                    m_client->sendPlayerInput(m_currentMoveDirection, shootPressedThisFrame, m_jumpRequestedThisFrame); 
                 }
                 // Si m_jumpRequestedThisFrame fue true en este tick de predicción, se considera "consumido" para el siguiente tick.
                 // shootPressedThisFrame = false; // Resetear si es un evento de un solo frame

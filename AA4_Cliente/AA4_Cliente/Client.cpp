@@ -9,8 +9,8 @@ enum PacketType {
     C_PLAYER_INPUT = 5,
     S_MAP_DATA = 100, S_LOGIN_OK = 101, S_LOGIN_FAIL = 102, S_REGISTER_OK = 103, S_REGISTER_FAIL = 104,
     S_ADDED_TO_MATCHMAKING_QUEUE = 105, S_MATCH_FOUND = 106,
-    S_GAME_STATE = 107,
-    S_ERROR_GENERAL = 108,
+    S_GAME_STATE = 107, C_PLAYER_TAUNT = 108, S_OPPONENT_TAUNT = 109,
+    S_ERROR_GENERAL = 110,
     UNKNOWN = 255
 };
 
@@ -35,10 +35,12 @@ Client::Client() :
     m_isConnectedToGameServer(false), m_amIPlayerOne(false),
     m_lastServerConfirmedMyPlayerPosition(-1.f, -1.f),
     m_newServerStateReceived(false),
-    m_myPlayerOnGround(false), // <--- NUEVO: Inicializar
-    m_myPlayerServerVelocity(0.f, 0.f) // <--- NUEVO: Inicializar
+    m_myPlayerOnGround(false), 
+    m_myPlayerServerVelocity(0.f, 0.f),
+    m_soundLoaded(false)
 {
     mapFilePath = "Data/map.txt";
+    //loadSounds();
 }
 
 Client* Client::getInstance() {
@@ -271,6 +273,59 @@ void Client::receiveAndProcessGameData() {
     }
 }
 
+//void Client::loadSounds()
+//{
+//    std::string TauntPath = "Assets/Sprites/Taunt.wav";
+//    if (!m_tauntSoundBuffer.loadFromFile(TauntPath)) {
+//        std::cerr << "[Client] Error: No se pudo cargar el sonido de burla." << std::endl;
+//    }
+//    else {
+//        m_tauntSound->setBuffer(m_tauntSoundBuffer);
+//        m_soundLoaded = true;
+//        std::cout << "[Client] Sonido de burla cargado." << std::endl;
+//    }
+//
+//
+//
+//}
+//
+//void Client::sendPlayerTaunt() {
+//
+//    playTauntSound(); // Reproducir localmente para el jugador que hace la burla
+//
+//
+//    sf::Packet tauntPacket;
+//    // Usa tu enum GameplayPacketType unificado
+//    tauntPacket << C_PLAYER_TAUNT;
+// 
+//
+//
+//    std::optional<sf::IpAddress> gameServerResolvedIpOpt = sf::IpAddress::resolve(m_gameServerIp);
+//    if (!gameServerResolvedIpOpt || gameServerResolvedIpOpt.value() == sf::IpAddress::Any) { 
+//        std::cerr << "[Client-UDP] No se pudo resolver la IP del GameServer para enviar burla." << std::endl;
+//        return;
+//    }
+//
+//    if (gameUdpSocket.send(tauntPacket, gameServerResolvedIpOpt.value(), m_gameServerUdpPort) != sf::Socket::Status::Done) {
+//        std::cerr << "[Client-UDP] Error enviando paquete de burla." << std::endl;
+//    }
+//    else {
+//        std::cout << "[Client-UDP] Paquete de burla C_PLAYER_TAUNT enviado." << std::endl;
+//    }
+//
+//
+//
+//
+//}
+
+//void Client::playTauntSound() {
+//
+//
+//    m_tauntSound->play();
+//    
+//
+//}
+
 void Client::processGamePacket(sf::Packet& udp_packet) {
     int rawPacketType;
     if (!(udp_packet >> rawPacketType)) {
@@ -281,8 +336,8 @@ void Client::processGamePacket(sf::Packet& udp_packet) {
     if (rawPacketType == static_cast<int>(S_GAME_STATE)) {
         float p1x, p1y, p2x, p2y;
         int p1h, p1l, p2h, p2l;
-        float p1vx, p1vy, p2vx, p2vy; // <--- NUEVO: Componentes de velocidad
-        bool p1og, p2og;             // <--- NUEVO: Flags de onGround
+        float p1vx, p1vy, p2vx, p2vy; 
+        bool p1og, p2og;             
 
         sf::Time receptionTime = udpPacketReceiveClock.getElapsedTime();
 
@@ -296,20 +351,20 @@ void Client::processGamePacket(sf::Packet& udp_packet) {
                 serverMyPos = { p1x, p1y };
                 myPlayerHealth = p1h;
                 myPlayerLives = p1l;
-                m_myPlayerServerVelocity = { p1vx, p1vy }; // <--- NUEVO: Almacenar velocidad del servidor
-                m_myPlayerOnGround = p1og;                 // <--- NUEVO: Almacenar onGround del servidor
+                m_myPlayerServerVelocity = { p1vx, p1vy }; 
+                m_myPlayerOnGround = p1og;                 
 
                 opponentPos = { p2x, p2y };
                 opponentPlayerHealth = p2h;
                 opponentPlayerLives = p2l;
-                // Si quieres interpolar velocidad/onGround del oponente, almacénalos aquí
+                
             }
             else { // Soy jugador dos
                 serverMyPos = { p2x, p2y };
                 myPlayerHealth = p2h;
                 myPlayerLives = p2l;
-                m_myPlayerServerVelocity = { p2vx, p2vy }; // <--- NUEVO: Almacenar velocidad del servidor
-                m_myPlayerOnGround = p2og;                 // <--- NUEVO: Almacenar onGround del servidor
+                m_myPlayerServerVelocity = { p2vx, p2vy }; 
+                m_myPlayerOnGround = p2og;                 
 
                 opponentPos = { p1x, p1y };
                 opponentPlayerHealth = p1h;
@@ -341,6 +396,10 @@ void Client::processGamePacket(sf::Packet& udp_packet) {
             std::cerr << "[Client-UDP] Error deserializando S_GAME_STATE (faltan campos de velocidad/onGround?)." << std::endl;
         }
     }
+    //else if (rawPacketType == S_OPPONENT_TAUNT) {
+    //    std::cout << "[Client-UDP] Recibido S_OPPONENT_TAUNT. El oponente hizo una burla." << std::endl;
+    //    playTauntSound(); // Reproducir el sonido porque el oponente hizo la burla
+    //    }
     else {
         std::cerr << "[Client-UDP] Tipo de GamePacket desconocido (" << rawPacketType << ") desde GameServer." << std::endl;
     }
@@ -354,11 +413,13 @@ void Client::addSentInputToHistory(const ClientInputRecord& input) {
     }
 }
 
-void Client::sendPlayerInput(float moveDir, bool wantsToShoot, bool jumpRequestedThisTick) { // <--- MODIFICADO
+
+
+void Client::sendPlayerInput(float moveDir, bool wantsToShoot, bool jumpRequestedThisTick) { 
     if (!m_isConnectedToGameServer) return;
 
     sf::Packet inputPacket;
-    inputPacket << static_cast<int>(PacketType::C_PLAYER_INPUT) << moveDir << wantsToShoot << jumpRequestedThisTick; // <--- MODIFICADO: Añadir jumpRequestedThisTick
+    inputPacket << static_cast<int>(PacketType::C_PLAYER_INPUT) << moveDir << wantsToShoot << jumpRequestedThisTick;
 
     std::optional<sf::IpAddress> gameServerResolvedIpOpt = sf::IpAddress::resolve(m_gameServerIp);
     if (!gameServerResolvedIpOpt || gameServerResolvedIpOpt.value() == sf::IpAddress::Any) {
@@ -370,7 +431,7 @@ void Client::sendPlayerInput(float moveDir, bool wantsToShoot, bool jumpRequeste
         ClientInputRecord record;
         record.moveDirection = moveDir;
         record.wantsToShoot = wantsToShoot;
-        record.jumpRequested = jumpRequestedThisTick; // <--- NUEVO: Registrar solicitud de salto
+        record.jumpRequested = jumpRequestedThisTick; 
         addSentInputToHistory(record);
     }
     else {
