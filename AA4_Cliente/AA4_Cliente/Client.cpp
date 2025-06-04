@@ -130,6 +130,26 @@ void Client::processPacket(sf::Packet tcp_packet) {
     std::cout << "[CLIENT DEBUG] Client::processPacket() - Procesando tipo: " << static_cast<int>(packetType) << std::endl; // DEBUG
 
     switch (packetType) {
+
+    case S_MAP_DATA: {
+
+        std::string receivedMapContent;
+
+            if (tcp_packet >> receivedMapContent) {
+            m_mapData = receivedMapContent;
+            m_mapReceived = true;
+            std::cout << "[CLIENT] Mapa recibido del servidor. Tamaño: " << m_mapData.length() << " bytes." << std::endl;
+            ReadWriteMapReceived(m_mapData);
+             std::cout << receivedMapContent << std::endl;
+            }
+         else {
+            std::cout << receivedMapContent << std::endl;
+            std::cerr << "[CLIENT] Error leyendo contenido del mapa del paquete S_MAP_DATA." << std::endl;
+            }
+        
+        }
+        break;
+
     case S_LOGIN_OK:
         std::cout << "[CLIENT] Recibido S_LOGIN_OK." << std::endl;
         loginOk = true;
@@ -324,4 +344,22 @@ void Client::sendPlayerInput(float moveDir, bool wantsToShoot) {
     if (gameUdpSocket.send(inputPacket, gameServerResolvedIpOpt.value(), m_gameServerUdpPort) != sf::Socket::Status::Done) {
         std::cerr << "[Client-UDP] Error enviando paquete de input." << std::endl;
     }
+}
+
+bool Client::ReadWriteMapReceived(std::string& receivedMapContent)
+{
+    std::ofstream mapFile(mapFilePath); // Abre el archivo para escritura (sobrescribe si existe)
+
+
+    if (mapFile.is_open()) {
+        mapFile << receivedMapContent; // Escribe el string del mapa en el archivo
+        mapFile.close();
+        std::cout << "[Client] Mapa guardado correctamente en: " << mapFilePath << std::endl;
+        return true;
+    }
+    else {
+        std::cerr << "[Client] Error: No se pudo abrir el archivo para guardar el mapa: " << mapFilePath << std::endl;
+        return false;
+    }
+   
 }

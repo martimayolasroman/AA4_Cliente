@@ -61,6 +61,7 @@ public:
     std::string getNickname();
     bool requestMatchmakingFriendly();
     std::string mapFilePath = "Data/map.txt";
+    bool ReadWriteMapReceived(std::string& receivedMapContent);
 
     bool hasReceivedMap() const { return m_mapReceived; }
     bool hasLoginResponse() const { return m_hasLoginResponse; }

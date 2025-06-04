@@ -66,14 +66,14 @@ GameState Login::Update()
 
 	while (window->isOpen()) {
 		Client::getInstance()->run(); // Procesar paquetes entrantes
-		Render(window); // Dibujar la UI
+		
 
 		// Comprobar si ha llegado una respuesta de login/registro
 		if (Client::getInstance()->hasLoginResponse()) {
 			bool success = Client::getInstance()->getLoginStatus();
 			Client::getInstance()->resetLoginResponse(); // Consumir la respuesta
 			if (success) {
-				std::cout << "[LoginUI] Login exitoso, cambiando a LOBBY." << std::endl;
+				std::cout << "[LoginUI] Login exitoso, cambiando a MATCHMAKING." << std::endl;
 				return GameState::SEARCH;
 			}
 			else {
@@ -87,7 +87,7 @@ GameState Login::Update()
 			bool success = Client::getInstance()->getRegisterStatus();
 			Client::getInstance()->resetRegisterResponse();
 			if (success) {
-				std::cout << "[LoginUI] Registro exitoso, cambiando a LOBBY." << std::endl;
+				std::cout << "[LoginUI] Registro exitoso, cambiando a MATCHMAKING." << std::endl;
 				return GameState::SEARCH; // O directamente al lobby si el servidor auto-loguea
 			}
 			else {
@@ -106,7 +106,10 @@ GameState Login::Update()
 		}
 		// Redibujar por si errorMessageText cambió
 	   // Render(window); // Podrías necesitar redibujar si el mensaje de error cambia
+		Render(window); // Dibujar la UI
 	}
+
+	
 	return GameState::EXIT; // Si la ventana se cierra
 }
 
