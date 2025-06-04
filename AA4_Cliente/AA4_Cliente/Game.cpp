@@ -52,8 +52,9 @@ bool Game::loadGameAssets()
     m_player.setTexture(m_playerTexture);
     m_opponentPlayer.setTexture(m_playerTexture); // Ambos usan la misma textura
 
-    
-    m_opponentPlayer.sprite->setColor(sf::Color(150, 255, 150, 220)); // Un tinte verdoso
+
+    m_player.sprite->setColor(sf::Color::Yellow);
+    m_opponentPlayer.sprite->setColor(sf::Color::Red); 
 
     return true;
 }
@@ -162,49 +163,49 @@ void Game::applyPlayerMovement(Player& player, float moveDirInput, bool jumpRequ
     }
 
     // Mover primero en Y y luego en X para colisiones (es un orden común)
-    player.shape.move({ 0.f, player.velocity.y * deltaTime });
+    player.sprite->move({ 0.f, player.velocity.y * deltaTime });
     player.onGround = false; // Asumir que ya no está en el suelo hasta que se detecte colisión
-    sf::FloatRect playerBounds = player.shape.getGlobalBounds();
+    sf::FloatRect playerBounds = player.sprite->getGlobalBounds();
 
     for (const auto& platform : m_platforms) {
         std::optional<sf::FloatRect> intersection = playerBounds.findIntersection(platform.getGlobalBounds());
         if (intersection) {
             if (player.velocity.y > 0) { // Moviéndose hacia abajo, chocó con el suelo
-                player.shape.setPosition({ playerBounds.position.x, intersection->position.y - playerBounds.size.y });
+                player.sprite->setPosition({ playerBounds.position.x, intersection->position.y - playerBounds.size.y });
                 player.onGround = true;
                 player.velocity.y = 0; // Detener movimiento vertical
             }
             else if (player.velocity.y < 0) { // Moviéndose hacia arriba, chocó con el techo
-                player.shape.setPosition({ playerBounds.position.x, intersection->position.y + intersection->size.y });
+                player.sprite->setPosition({ playerBounds.position.x, intersection->position.y + intersection->size.y });
                 player.velocity.y = 0; // Detener movimiento vertical
             }
-            playerBounds = player.shape.getGlobalBounds(); // Actualizar bounds después del movimiento vertical
+            playerBounds = player.sprite->getGlobalBounds(); // Actualizar bounds después del movimiento vertical
             break;
         }
     }
 
     // Mover en X
-    player.shape.move({ player.velocity.x * deltaTime, 0.f });
-    playerBounds = player.shape.getGlobalBounds(); // Actualizar bounds después del movimiento horizontal
+    player.sprite->move({ player.velocity.x * deltaTime, 0.f });
+    playerBounds = player.sprite->getGlobalBounds(); // Actualizar bounds después del movimiento horizontal
 
     for (const auto& platform : m_platforms) {
         std::optional<sf::FloatRect> intersection = playerBounds.findIntersection(platform.getGlobalBounds());
         if (intersection) {
             if (player.velocity.x > 0) { // Moviéndose a la derecha, chocó con una pared
-                player.shape.setPosition({ intersection->position.x - playerBounds.size.x, playerBounds.position.y });
+                player.sprite->setPosition({ intersection->position.x - playerBounds.size.x, playerBounds.position.y });
             }
             else if (player.velocity.x < 0) { // Moviéndose a la izquierda, chocó con una pared
-                player.shape.setPosition({ intersection->position.x + intersection->size.x, playerBounds.position.y });
+                player.sprite->setPosition({ intersection->position.x + intersection->size.x, playerBounds.position.y });
             }
             player.velocity.x = 0; // Detener movimiento horizontal
-            playerBounds = player.shape.getGlobalBounds(); // Actualizar bounds
+            playerBounds = player.sprite->getGlobalBounds(); // Actualizar bounds
             break;
         }
     }
 
     // Límites de pantalla (ajuste si el jugador sale de los límites horizontales)
-    if (player.shape.getPosition().x < 0.f) { player.shape.setPosition({ 0.f, player.shape.getPosition().y }); }
-    if (player.shape.getPosition().x + playerBounds.size.x > WINDOW_WIDTH) { player.shape.setPosition({ WINDOW_WIDTH - playerBounds.size.x, player.shape.getPosition().y }); }
+    if (player.sprite->getPosition().x < 0.f) { player.sprite->setPosition({ 0.f, player.sprite->getPosition().y }); }
+    if (player.sprite->getPosition().x + playerBounds.size.x > WINDOW_WIDTH) { player.sprite->setPosition({ WINDOW_WIDTH - playerBounds.size.x, player.sprite->getPosition().y }); }
     // Considerar límites Y también para caídas mortales o techos si es necesario
 }
 
@@ -215,7 +216,7 @@ void Game::reconcilePlayer() {
     }
 
     sf::Vector2f serverPosition = m_client->getLastServerConfirmedMyPlayerPosition();
-    sf::Vector2f currentPredictedPos = m_player.shape.getPosition();
+    sf::Vector2f currentPredictedPos = m_player.sprite->getPosition();
     m_client->consumeServerStateFlag(); // Marcar el estado del servidor como procesado
 
     float diffX = currentPredictedPos.x - serverPosition.x;
@@ -240,7 +241,7 @@ void Game::reconcilePlayer() {
             << ") Vel: (" << m_player.velocity.x << "," << m_player.velocity.y
             << ") OnGround: " << (m_player.onGround ? "True" : "False") << std::endl;
 
-        m_player.shape.setPosition(serverPosition);
+        m_player.sprite->setPosition(serverPosition);
         m_player.velocity = m_client->getMyPlayerServerVelocity(); // <--- NUEVO: Ajustar velocidad
         m_player.onGround = m_client->getMyPlayerOnGround();     // <--- NUEVO: Ajustar onGround
 
@@ -308,7 +309,7 @@ void Game::run() {
                 m_gameHasStarted = true;
                 m_interpolationRenderClock.restart();
                 if (m_waitingText && m_fontLoaded) m_waitingText->setString("Partida Encontrada!");
-                m_player.shape.setPosition(m_client->getLastServerConfirmedMyPlayerPosition());
+                m_player.sprite->setPosition(m_client->getLastServerConfirmedMyPlayerPosition());
                 // <--- NUEVO: Inicializar velocidad y onGround al inicio del juego con valores del servidor
                 m_player.velocity = m_client->getMyPlayerServerVelocity();
                 m_player.onGround = m_client->getMyPlayerOnGround();
