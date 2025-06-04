@@ -65,6 +65,8 @@ private:
     sf::RenderWindow* m_window;
     Client* m_client;
 
+
+    sf::Texture m_playerTexture; // Textura para el jugador
     Player m_player;
     Player m_opponentPlayer;
     bool m_gameHasStarted = false;
@@ -93,4 +95,5 @@ private:
     // Funciones para lógica de jugador y reconciliación
     void applyPlayerMovement(Player& player, float moveDir, bool jumpRequested, float deltaTime); // <--- MODIFICADO
     void reconcilePlayer(); // Reconciliación simple
+    bool loadGameAssets();
 };

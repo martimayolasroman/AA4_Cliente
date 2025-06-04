@@ -39,6 +39,25 @@ std::vector<sf::RectangleShape> Game::loadMap(const std::string& filename) {
     return platforms_map;
 }
 
+bool Game::loadGameAssets()
+{
+    std::string playerTexturePath = "Assets/Sprites/player_sprite.png"; // ¡CAMBIA ESTA RUTA!
+    if (!m_playerTexture.loadFromFile(playerTexturePath)) {
+        std::cerr << "[Game] ERROR: No se pudo cargar la textura del jugador desde: " << playerTexturePath << std::endl;
+        return false;
+    }
+    m_playerTexture.setSmooth(true); // Opcional, para mejor apariencia al escalar
+
+    // Si el oponente usa la misma textura:
+    m_player.setTexture(m_playerTexture);
+    m_opponentPlayer.setTexture(m_playerTexture); // Ambos usan la misma textura
+
+    
+    m_opponentPlayer.sprite->setColor(sf::Color(150, 255, 150, 220)); // Un tinte verdoso
+
+    return true;
+}
+
 void Game::centerTextOrigin(sf::Text& text) {
     if (!m_fontLoaded) return;
     sf::FloatRect text_bounds = text.getLocalBounds();
@@ -65,6 +84,12 @@ Game::Game(sf::RenderWindow* window, Client* client_instance)
         std::cerr << "CRITICAL: Game_constructor - Client instance is null!" << std::endl;
         return;
     }
+
+    if (!loadGameAssets()) {
+        std::cerr << "[Game] Error al cargar assets. El juego puede no verse correctamente." << std::endl;
+        // Puedes decidir cerrar el juego o continuar con sprites vacíos/fallback.
+    }
+
 
     m_platforms = loadMap(m_client->mapFilePath);
 
@@ -102,8 +127,7 @@ Game::Game(sf::RenderWindow* window, Client* client_instance)
         std::cerr << "[Game] Error: No se pudo cargar la fuente: " << m_gameFontPath << ". Los textos no se mostrarán." << std::endl;
     }
 
-    m_opponentPlayer.shape.setFillColor(COLOR_OPPONENT_GREEN);
-    m_player.shape.setFillColor(COLOR_PLAYER_BLUE);
+    
 }
 
 Game::~Game() {
@@ -348,17 +372,17 @@ void Game::run() {
                     sf::Vector2f interpolatedPosition;
                     interpolatedPosition.x = oppState.previousPosition.x + (oppState.currentPosition.x - oppState.previousPosition.x) * interpolationFactor;
                     interpolatedPosition.y = oppState.previousPosition.y + (oppState.currentPosition.y - oppState.previousPosition.y) * interpolationFactor;
-                    m_opponentPlayer.shape.setPosition(interpolatedPosition);
+                    m_opponentPlayer.sprite->setPosition(interpolatedPosition);
                 }
                 else if (renderTimeTarget > currTimestamp.asSeconds()) {
-                    m_opponentPlayer.shape.setPosition(oppState.currentPosition);
+                    m_opponentPlayer.sprite->setPosition(oppState.currentPosition);
                 }
                 else {
-                    m_opponentPlayer.shape.setPosition(oppState.hasReceivedFirstUpdate ? oppState.currentPosition : oppState.previousPosition);
+                    m_opponentPlayer.sprite->setPosition(oppState.hasReceivedFirstUpdate ? oppState.currentPosition : oppState.previousPosition);
                 }
             }
             else if (oppState.hasReceivedFirstUpdate) {
-                m_opponentPlayer.shape.setPosition(oppState.currentPosition);
+                m_opponentPlayer.sprite->setPosition(oppState.currentPosition);
             }
         }
 
@@ -367,9 +391,9 @@ void Game::run() {
         for (const auto& platform : m_platforms) { m_window->draw(platform); }
 
         if (m_gameHasStarted) {
-            m_window->draw(m_player.shape);
+            if (m_player.sprite) m_window->draw(*m_player.sprite);
             if (m_client->getOpponentInterpolationState().hasReceivedFirstUpdate) {
-                m_window->draw(m_opponentPlayer.shape);
+                if (m_opponentPlayer.sprite) m_window->draw(*m_opponentPlayer.sprite);
             }
             if (m_fontLoaded) {
                 if (m_healthText) { m_healthText->setString("Health: " + std::to_string(m_player.health)); m_window->draw(*m_healthText); }
