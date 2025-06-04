@@ -3,23 +3,21 @@
 
 #include <SFML/Graphics/RectangleShape.hpp>
 #include <SFML/System/Vector2.hpp>
-
-// Nota: Las constantes como PLAYER_HEALTH_MAX, PLAYER_WIDTH, etc.,
-// serán accedidas desde Player.cpp, que incluirá Game.h
+ 
 
 struct Player {
-    std::optional<sf::Sprite> sprite; // Reemplaza sf::RectangleShape shape
+    std::optional<sf::Sprite> sprite;  
     sf::Vector2f velocity;
     int health;
     int lives;
     bool onGround;
     float shootTimer;
-    bool facingRight; // For bullet direction
+    bool facingRight; 
 
-    Player(); // Declaración del constructor
+    Player();  
     void takeDamage();
-    void setTexture(const sf::Texture& texture); // Para asignar la textura desde Game
+    void setTexture(const sf::Texture& texture);  
 
 };
 
-#endif // PLAYER_H
+#endif  

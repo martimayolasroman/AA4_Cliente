@@ -1,9 +1,9 @@
 #include "Client.h"
 #include <SFML/System/Sleep.hpp>
 #include <SFML/System/Clock.hpp>
+#include <fstream>  
 
-// Definición local de PacketType (DEBE COINCIDIR CON EL SERVIDOR DE SERVICIOS)
-// Y también con el Servidor Dedicado para los tipos relevantes
+ // Y también con el Servidor Dedicado para los tipos relevantes
 enum PacketType {
     C_REQUEST_LOGIN = 1, C_REQUEST_REGISTER = 2, C_REQUEST_MATCHMAKING_FRIENDLY = 3, C_MAP_RECEIVED_ACK = 4,
     C_PLAYER_INPUT = 5,
@@ -16,9 +16,12 @@ enum PacketType {
 
 sf::Clock udpPacketReceiveClock;
 
+// Sobrecarga del operador >> para extraer un PacketType de un sf::Packet.
 inline sf::Packet& operator >> (sf::Packet& packet, PacketType& tipo) {
     int temp; packet >> temp; tipo = static_cast<PacketType>(temp); return packet;
 }
+
+// Sobrecarga del operador << para insertar un PacketType en un sf::Packet.
 inline sf::Packet& operator << (sf::Packet& packet, PacketType tipo) {
     packet << static_cast<int>(tipo); return packet;
 }
@@ -35,14 +38,15 @@ Client::Client() :
     m_isConnectedToGameServer(false), m_amIPlayerOne(false),
     m_lastServerConfirmedMyPlayerPosition(-1.f, -1.f),
     m_newServerStateReceived(false),
-    m_myPlayerOnGround(false), 
+    m_myPlayerOnGround(false),
     m_myPlayerServerVelocity(0.f, 0.f),
     m_soundLoaded(false)
 {
     mapFilePath = "Data/map.txt";
-    //loadSounds();
+    //loadSounds();  
 }
 
+// getInstance: Devuelve la única instancia del cliente (patrón Singleton).
 Client* Client::getInstance() {
     if (instanceClient == nullptr) {
         instanceClient = new Client();
@@ -50,20 +54,22 @@ Client* Client::getInstance() {
     return instanceClient;
 }
 
+// connectToServer: Intenta conectar el cliente al servidor de servicios usando TCP.
 bool Client::connectToServer(unsigned short port) {
     if (Clientsocket.connect(SERVER_IP, port) != sf::Socket::Status::Done) {
         std::cerr << "Error al conectar al servidor de servicios" << std::endl;
         connected = false;
         return false;
     }
-    Clientsocket.setBlocking(false);
+    Clientsocket.setBlocking(false);  
     connected = true;
     myPort = Clientsocket.getLocalPort();
     std::cout << "Conectado al servidor de servicios correctamente en el puerto local " << myPort << std::endl;
-    udpPacketReceiveClock.restart();
+    udpPacketReceiveClock.restart(); // Reinicia el reloj para medir el tiempo de los paquetes UDP.
     return true;
 }
 
+// run: Procesa los paquetes TCP entrantes del servidor de servicios.
 void Client::run() {
     if (!connected) return;
 
@@ -85,6 +91,7 @@ void Client::run() {
     }
 }
 
+// loginAction: Envía una solicitud de login al servidor con un nombre de usuario y contraseña.
 bool Client::loginAction(std::string nick, std::string pass) {
     if (!connected) {
         std::cerr << "[CLIENT] No conectado al servidor para login." << std::endl;
@@ -94,10 +101,11 @@ bool Client::loginAction(std::string nick, std::string pass) {
     login_packet << static_cast<int>(PacketType::C_REQUEST_LOGIN) << nick << pass;
     std::cout << "[CLIENT] Enviando LOGIN: " << nick << std::endl;
     clientNick = nick;
-    m_hasLoginResponse = false;
+    m_hasLoginResponse = false; // Indica que se está esperando una respuesta de login.
     return sendPacket(login_packet);
 }
 
+// RegisterAction: Envía una solicitud de registro al servidor con un nombre de usuario y contraseña.
 bool Client::RegisterAction(std::string nick, std::string pass) {
     if (!connected) {
         std::cerr << "[CLIENT] No conectado al servidor para register." << std::endl;
@@ -106,15 +114,17 @@ bool Client::RegisterAction(std::string nick, std::string pass) {
     sf::Packet register_packet;
     register_packet << static_cast<int>(PacketType::C_REQUEST_REGISTER) << nick << pass;
     std::cout << "[CLIENT] Enviando REGISTER: " << nick << std::endl;
-    m_hasRegisterResponse = false;
+    m_hasRegisterResponse = false; // Indica que se está esperando una respuesta de registro.
     return sendPacket(register_packet);
 }
 
+// sendPacket: Envía un paquete TCP al servidor de servicios.
 bool Client::sendPacket(sf::Packet& packet_to_send) {
     if (!connected) return false;
     return Clientsocket.send(packet_to_send) == sf::Socket::Status::Done;
 }
 
+// processPacket: Procesa los diferentes tipos de paquetes TCP recibidos del servidor de servicios.
 void Client::processPacket(sf::Packet tcp_packet) {
     PacketType packetType;
     if (!(tcp_packet >> packetType)) {
@@ -172,6 +182,7 @@ void Client::processPacket(sf::Packet tcp_packet) {
         unsigned short myUdpPortForGameVal;
         bool isPlayerOneVal;
 
+        // Deserializa la información del servidor de juego y del puerto UDP  
         if (tcp_packet >> gameServerIpStr >> gameServerUdpPortVal >> myUdpPortForGameVal >> isPlayerOneVal) {
             m_gameServerIp = gameServerIpStr;
             m_gameServerUdpPort = gameServerUdpPortVal;
@@ -185,10 +196,8 @@ void Client::processPacket(sf::Packet tcp_packet) {
                 << ". Usare mi puerto UDP local: " << m_myUdpPortForGame
                 << ". Soy Jugador Uno: " << (m_amIPlayerOne ? "Si" : "No") << std::endl;
 
-            opponentInterpolationState = OpponentInterpolationState();
-            // myPlayerPosition = { -1.f, -1.f }; // Ya no es la fuente principal de verdad
-
-            connectToGameServerUDP();
+            opponentInterpolationState = OpponentInterpolationState(); // Inicializa el estado para la interpolación del oponente.
+            connectToGameServerUDP(); // Intenta conectar al servidor de juego por UDP.
         }
         else {
             std::cerr << "[CLIENT] Error leyendo datos de S_MATCH_FOUND." << std::endl;
@@ -215,10 +224,12 @@ void Client::processPacket(sf::Packet tcp_packet) {
     }
 }
 
+// getNickname: Devuelve el nickname del cliente.
 std::string Client::getNickname() {
     return clientNick;
 }
 
+// requestMatchmakingFriendly: Envía una solicitud al servidor para entrar en la cola de matchmaking.
 bool Client::requestMatchmakingFriendly() {
     if (!connected) {
         std::cerr << "[CLIENT] No conectado al servidor para matchmaking." << std::endl;
@@ -234,9 +245,10 @@ bool Client::requestMatchmakingFriendly() {
     return false;
 }
 
+// connectToGameServerUDP: Intenta enlazar el socket UDP del cliente y conectar al servidor de juego.
 void Client::connectToGameServerUDP() {
     if (m_isConnectedToGameServer) {
-        gameUdpSocket.unbind();
+        gameUdpSocket.unbind(); // Desenlaza el socket si ya estaba conectado.
     }
 
     if (gameUdpSocket.bind(m_myUdpPortForGame) != sf::Socket::Status::Done) {
@@ -245,18 +257,18 @@ void Client::connectToGameServerUDP() {
         m_matchFound = false;
         return;
     }
-    gameUdpSocket.setBlocking(false);
+    gameUdpSocket.setBlocking(false); 
     m_isConnectedToGameServer = true;
     std::cout << "[Client-UDP] Socket UDP enlazado al puerto local " << m_myUdpPortForGame
         << ". Listo para comunicarse con GameServer en "
         << m_gameServerIp << ":" << m_gameServerUdpPort << std::endl;
 
-    udpPacketReceiveClock.restart();
-    opponentInterpolationState = OpponentInterpolationState();
-    m_opponentBulletStates.clear(); // <--- NUEVO: Limpiar balas del oponente al inicio de la partida
-
+    udpPacketReceiveClock.restart(); // Reinicia el reloj para los paquetes de juego.
+    opponentInterpolationState = OpponentInterpolationState(); // Restablece el estado de interpolación del oponente.
+    m_opponentBulletStates.clear(); // Limpia el estado de las balas del oponente.
 }
 
+// receiveAndProcessGameData: Recibe y procesa los paquetes UDP entrantes del servidor de juego.
 void Client::receiveAndProcessGameData() {
     if (!m_isConnectedToGameServer) return;
 
@@ -264,70 +276,20 @@ void Client::receiveAndProcessGameData() {
     std::optional<sf::IpAddress> senderIpOpt;
     unsigned short senderPort;
 
+    // Recibe paquetes hasta que no haya más pendientes o ocurra un error.
     while (gameUdpSocket.receive(gameUdpPacket, senderIpOpt, senderPort) == sf::Socket::Status::Done) {
         if (senderIpOpt.has_value()) {
             sf::IpAddress senderIp = senderIpOpt.value();
+            // Verifica que el paquete provenga del servidor de juego esperado.
             if (senderIp.toString() == m_gameServerIp && senderPort == m_gameServerUdpPort) {
                 processGamePacket(gameUdpPacket);
             }
         }
-        gameUdpPacket.clear();
+        gameUdpPacket.clear(); // Limpia el paquete para la siguiente recepción.
     }
 }
 
-//void Client::loadSounds()
-//{
-//    std::string TauntPath = "Assets/Sprites/Taunt.wav";
-//    if (!m_tauntSoundBuffer.loadFromFile(TauntPath)) {
-//        std::cerr << "[Client] Error: No se pudo cargar el sonido de burla." << std::endl;
-//    }
-//    else {
-//        m_tauntSound->setBuffer(m_tauntSoundBuffer);
-//        m_soundLoaded = true;
-//        std::cout << "[Client] Sonido de burla cargado." << std::endl;
-//    }
-//
-//
-//
-//}
-//
-//void Client::sendPlayerTaunt() {
-//
-//    playTauntSound(); // Reproducir localmente para el jugador que hace la burla
-//
-//
-//    sf::Packet tauntPacket;
-//    // Usa tu enum GameplayPacketType unificado
-//    tauntPacket << C_PLAYER_TAUNT;
-// 
-//
-//
-//    std::optional<sf::IpAddress> gameServerResolvedIpOpt = sf::IpAddress::resolve(m_gameServerIp);
-//    if (!gameServerResolvedIpOpt || gameServerResolvedIpOpt.value() == sf::IpAddress::Any) { 
-//        std::cerr << "[Client-UDP] No se pudo resolver la IP del GameServer para enviar burla." << std::endl;
-//        return;
-//    }
-//
-//    if (gameUdpSocket.send(tauntPacket, gameServerResolvedIpOpt.value(), m_gameServerUdpPort) != sf::Socket::Status::Done) {
-//        std::cerr << "[Client-UDP] Error enviando paquete de burla." << std::endl;
-//    }
-//    else {
-//        std::cout << "[Client-UDP] Paquete de burla C_PLAYER_TAUNT enviado." << std::endl;
-//    }
-//
-//
-//
-//
-//}
-
-//void Client::playTauntSound() {
-//
-//
-//    m_tauntSound->play();
-//    
-//
-//}
-
+// processGamePacket: Procesa los diferentes tipos de paquetes de juego UDP recibidos del servidor de juego.
 void Client::processGamePacket(sf::Packet& udp_packet) {
     int rawPacketType;
     if (!(udp_packet >> rawPacketType)) {
@@ -338,45 +300,46 @@ void Client::processGamePacket(sf::Packet& udp_packet) {
     if (rawPacketType == static_cast<int>(S_GAME_STATE)) {
         float p1x, p1y, p2x, p2y;
         int p1h, p1l, p2h, p2l;
-        float p1vx, p1vy, p2vx, p2vy; 
-        bool p1og, p2og;             
+        float p1vx, p1vy, p2vx, p2vy;
+        bool p1og, p2og;
 
         sf::Time receptionTime = udpPacketReceiveClock.getElapsedTime();
 
-        // Esperar que el servidor envíe estos nuevos campos
-        if (udp_packet >> p1x >> p1y >> p1h >> p1l >> p1vx >> p1vy >> p1og // Estado del Jugador 1
-            >> p2x >> p2y >> p2h >> p2l >> p2vx >> p2vy >> p2og) { // Estado del Jugador 2
+        // Deserializa el estado de ambos jugadores (posición, salud, vidas, velocidad, en suelo).
+        if (udp_packet >> p1x >> p1y >> p1h >> p1l >> p1vx >> p1vy >> p1og
+            >> p2x >> p2y >> p2h >> p2l >> p2vx >> p2vy >> p2og) {
             sf::Vector2f serverMyPos;
             sf::Vector2f opponentPos;
 
+            // Asigna los datos a la posición del jugador local y del oponente según si es el jugador 1 o 2.
             if (m_amIPlayerOne) {
                 serverMyPos = { p1x, p1y };
                 myPlayerHealth = p1h;
                 myPlayerLives = p1l;
-                m_myPlayerServerVelocity = { p1vx, p1vy }; 
-                m_myPlayerOnGround = p1og;                 
+                m_myPlayerServerVelocity = { p1vx, p1vy };
+                m_myPlayerOnGround = p1og;
 
                 opponentPos = { p2x, p2y };
                 opponentPlayerHealth = p2h;
                 opponentPlayerLives = p2l;
-                
+
             }
             else { // Soy jugador dos
                 serverMyPos = { p2x, p2y };
                 myPlayerHealth = p2h;
                 myPlayerLives = p2l;
-                m_myPlayerServerVelocity = { p2vx, p2vy }; 
-                m_myPlayerOnGround = p2og;                 
+                m_myPlayerServerVelocity = { p2vx, p2vy };
+                m_myPlayerOnGround = p2og;
 
                 opponentPos = { p1x, p1y };
                 opponentPlayerHealth = p1h;
                 opponentPlayerLives = p1l;
             }
 
-            m_lastServerConfirmedMyPlayerPosition = serverMyPos;
-            m_newServerStateReceived = true; // Indicar a Game.cpp que hay un nuevo estado
+            m_lastServerConfirmedMyPlayerPosition = serverMyPos; // Almacena la última posición confirmada por el servidor del jugador local.
+            m_newServerStateReceived = true; // Indica que se ha recibido un nuevo estado del servidor.
 
-            // Actualizar el estado del oponente para la interpolación
+            // Actualiza el estado de interpolación del oponente.
             if (!opponentInterpolationState.hasReceivedFirstUpdate) {
                 opponentInterpolationState.previousPosition = opponentPos;
                 opponentInterpolationState.previousTimestamp = receptionTime;
@@ -393,20 +356,18 @@ void Client::processGamePacket(sf::Packet& udp_packet) {
                     opponentInterpolationState.hasReceivedEnoughUpdatesForInterpolation = true;
                 }
             }
-            // <--- NUEVO: Procesar estado de las balas del servidor
+
+            // Procesa el estado de las balas del servidor.
             int numBullets;
             if (udp_packet >> numBullets) {
-                m_opponentBulletStates.clear(); // Limpiar la lista actual de balas del oponente
+                m_opponentBulletStates.clear(); // Limpia la lista actual de balas del oponente.
                 for (int i = 0; i < numBullets; ++i) {
                     float bx, by, bvx, bvy, br;
                     bool bactive;
                     int bownerId;
-                    // El servidor envía también el ownerId y active status
                     if (udp_packet >> bx >> by >> bvx >> bvy >> br >> bactive >> bownerId) {
-                        // Solo añadir a la lista si la bala pertenece al otro jugador
-                        // (o si quieres ver tus propias balas confirmadas por el servidor aquí también)
+                        // Solo añadir a la lista si la bala pertenece al otro jugador.
                         if ((m_amIPlayerOne && bownerId == 2) || (!m_amIPlayerOne && bownerId == 1)) {
-                            // Almacenar el estado de la bala del servidor con el timestamp de recepción
                             m_opponentBulletStates.emplace_back(
                                 sf::Vector2f(bx, by), sf::Vector2f(bvx, bvy), br, bactive, bownerId, receptionTime
                             );
@@ -414,7 +375,7 @@ void Client::processGamePacket(sf::Packet& udp_packet) {
                     }
                     else {
                         std::cerr << "[Client-UDP] Error deserializando datos de una bala del paquete S_GAME_STATE." << std::endl;
-                        break; // Salir del bucle si hay error en una bala
+                        break;
                     }
                 }
             }
@@ -425,26 +386,22 @@ void Client::processGamePacket(sf::Packet& udp_packet) {
             std::cerr << "[Client-UDP] Error deserializando S_GAME_STATE (faltan campos de velocidad/onGround?)." << std::endl;
         }
     }
-    //else if (rawPacketType == S_OPPONENT_TAUNT) {
-    //    std::cout << "[Client-UDP] Recibido S_OPPONENT_TAUNT. El oponente hizo una burla." << std::endl;
-    //    playTauntSound(); // Reproducir el sonido porque el oponente hizo la burla
-    //    }
     else {
         std::cerr << "[Client-UDP] Tipo de GamePacket desconocido (" << rawPacketType << ") desde GameServer." << std::endl;
     }
 }
 
+// addSentInputToHistory: Añade un registro de input del cliente a un historial limitado.
 void Client::addSentInputToHistory(const ClientInputRecord& input) {
     m_pendingInputs.push_back(input);
-    const size_t MAX_PENDING_INPUTS = 200; // Límite para evitar crecimiento indefinido
+    const size_t MAX_PENDING_INPUTS = 200;
     if (m_pendingInputs.size() > MAX_PENDING_INPUTS) {
-        m_pendingInputs.pop_front();
+        m_pendingInputs.pop_front(); // Elimina el input más antiguo si se pasa del límite.
     }
 }
 
-
-
-void Client::sendPlayerInput(float moveDir, bool wantsToShoot, bool jumpRequestedThisTick) { 
+// sendPlayerInput: Envía las acciones del jugador (movimiento, disparo, salto) al servidor de juego vía UDP.
+void Client::sendPlayerInput(float moveDir, bool wantsToShoot, bool jumpRequestedThisTick) {
     if (!m_isConnectedToGameServer) return;
 
     sf::Packet inputPacket;
@@ -456,11 +413,12 @@ void Client::sendPlayerInput(float moveDir, bool wantsToShoot, bool jumpRequeste
         return;
     }
 
+    // Envía el paquete y, si tiene éxito, añade el input al historial.
     if (gameUdpSocket.send(inputPacket, gameServerResolvedIpOpt.value(), m_gameServerUdpPort) == sf::Socket::Status::Done) {
         ClientInputRecord record;
         record.moveDirection = moveDir;
         record.wantsToShoot = wantsToShoot;
-        record.jumpRequested = jumpRequestedThisTick; 
+        record.jumpRequested = jumpRequestedThisTick;
         addSentInputToHistory(record);
     }
     else {
@@ -468,11 +426,12 @@ void Client::sendPlayerInput(float moveDir, bool wantsToShoot, bool jumpRequeste
     }
 }
 
+// ReadWriteMapReceived: Guarda el contenido del mapa recibido en un archivo local.
 bool Client::ReadWriteMapReceived(std::string& receivedMapContent) {
-    std::ofstream mapFile(mapFilePath, std::ios::out | std::ios::trunc);
+    std::ofstream mapFile(mapFilePath, std::ios::out | std::ios::trunc); // Abre el archivo para escritura, truncándolo si ya existe.
 
     if (mapFile.is_open()) {
-        mapFile << receivedMapContent;
+        mapFile << receivedMapContent; 
         mapFile.close();
         return true;
     }

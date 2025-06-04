@@ -27,8 +27,8 @@ private:
     sf::Color buttonTextColor = sf::Color::White;
     sf::Color titleTextColor = sf::Color(255, 165, 0);
 
-    sf::Font font; // Se carga en el constructor
-    bool fontLoadedSuccessfully = false; // Flag para saber si la fuente cargó
+    sf::Font font; 
+    bool fontLoadedSuccessfully = false;  
     std::string fontsPath = "Assets/Fonts/";
     std::string fontName = "Straw Milky.otf";
 

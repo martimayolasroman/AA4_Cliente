@@ -138,7 +138,6 @@
     <ClCompile Include="Login.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="Player.cpp" />
-    <ClCompile Include="Players.cpp" />
     <ClCompile Include="SearchMenu.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -149,7 +148,6 @@
     <ClInclude Include="GameState.h" />
     <ClInclude Include="Login.h" />
     <ClInclude Include="Player.h" />
-    <ClInclude Include="Players.h" />
     <ClInclude Include="SearchMenu.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

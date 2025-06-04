@@ -7,14 +7,13 @@
 #include <atomic>
 #include <optional>
 #include <SFML/System/Time.hpp>
-#include <deque> // Para m_pendingInputs
-#include <SFML/Audio.hpp> // Para sonido
+#include <deque>  
+#include <SFML/Audio.hpp>  
 
 #define WIDTH 1280
 #define HEIGHT 720
 
-// Estructura para el estado del oponente usado en la interpolación
-struct OpponentInterpolationState {
+ struct OpponentInterpolationState {
     sf::Vector2f currentPosition = { -1.f, -1.f };
     sf::Time currentTimestamp;
     sf::Vector2f previousPosition = { -1.f, -1.f };
@@ -23,21 +22,21 @@ struct OpponentInterpolationState {
     bool hasReceivedEnoughUpdatesForInterpolation = false;
 };
 
-// Estructura para el historial de inputs enviados por el cliente
+// Historial de inputs enviados por el cliente
 struct ClientInputRecord {
     float moveDirection;
     bool wantsToShoot;
-    bool jumpRequested; // <--- NUEVO: Flag para la solicitud de salto
+    bool jumpRequested;  
 };
 
-// <--- NUEVA ESTRUCTURA: Para pasar el estado de la bala del servidor al cliente para interpolación
+// Para interpolación
 struct ServerBulletState {
     sf::Vector2f position;
-    sf::Vector2f velocity; // Podrías necesitar esto si quieres interpolar velocidad
+    sf::Vector2f velocity;  
     float radius;
-    bool isActive; // Para saber si la bala existe
-    int ownerPlayerId; // Opcional, si el cliente necesita saber quién disparó
-    sf::Time timestamp; // <--- NUEVO: Timestamp de cuando el servidor generó este estado
+    bool isActive;  
+    int ownerPlayerId; 
+    sf::Time timestamp; 
 
     ServerBulletState(sf::Vector2f pos = { 0,0 }, sf::Vector2f vel = { 0,0 }, float r = 0, bool active = false, int owner = 0, sf::Time ts = sf::Time::Zero)
         : position(pos), velocity(vel), radius(r), isActive(active), ownerPlayerId(owner), timestamp(ts) {}
@@ -68,22 +67,20 @@ private:
     void processGamePacket(sf::Packet& packet);
 
     // Estado del jugador propio (recibido del servidor)
-    sf::Vector2f myPlayerPosition = { -1.f, -1.f }; // ¡OJO! Esta ya no se usa para la posición directa del jugador local
+    sf::Vector2f myPlayerPosition = { -1.f, -1.f };  
     int myPlayerHealth = 0;
     int myPlayerLives = 0;
 
     std::vector<ServerBulletState> m_opponentBulletStates;
 
-    // Para la reconciliación y el estado autoritativo del jugador local
-    sf::Vector2f m_lastServerConfirmedMyPlayerPosition;
-    bool m_newServerStateReceived; // Flag para Game.cpp
-    bool m_myPlayerOnGround;          // <--- NUEVO: Estado onGround del servidor
-    sf::Vector2f m_myPlayerServerVelocity; // <--- NUEVO: Velocidad del servidor
+     sf::Vector2f m_lastServerConfirmedMyPlayerPosition;
+    bool m_newServerStateReceived;  
+    bool m_myPlayerOnGround;          
+    sf::Vector2f m_myPlayerServerVelocity; 
 
-    // Historial de inputs enviados
-    std::deque<ClientInputRecord> m_pendingInputs;
+     std::deque<ClientInputRecord> m_pendingInputs;
 
-    // Estado del oponente (recibido del servidor, usado para interpolación)
+    // Estado del oponente (recibido del servidor, para la interpolación)
     OpponentInterpolationState opponentInterpolationState;
     int opponentPlayerHealth = 0;
     int opponentPlayerLives = 0;
@@ -95,8 +92,6 @@ private:
  
     bool m_soundLoaded = false;
     void loadSounds();
-    //sf::SoundBuffer m_tauntSoundBuffer;
-   // std::optional<sf::Sound> m_tauntSound;
 
     sf::TcpSocket Clientsocket;
     bool connected;
@@ -128,28 +123,28 @@ public:
 
     bool amIPlayerOne() const { return m_amIPlayerOne; }
 
-    // Para el jugador propio (salud y vidas)
+    // Para el jugador local  
     int getMyPlayerHealth() const { return myPlayerHealth; }
     int getMyPlayerLives() const { return myPlayerLives; }
 
-    // Para la reconciliación y el estado autoritativo
+    // Para la reconciliación 
     sf::Vector2f getLastServerConfirmedMyPlayerPosition() const { return m_lastServerConfirmedMyPlayerPosition; }
     bool hasNewServerState() const { return m_newServerStateReceived; }
     void consumeServerStateFlag() { m_newServerStateReceived = false; }
     bool getMyPlayerOnGround() const { return m_myPlayerOnGround; }         
     sf::Vector2f getMyPlayerServerVelocity() const { return m_myPlayerServerVelocity; } 
 
-    // Para el oponente (usado por Game.cpp para interpolar)
+    // Para el oponente 
     const OpponentInterpolationState& getOpponentInterpolationState() const { return opponentInterpolationState; }
     int getOpponentPlayerHealth() const { return opponentPlayerHealth; }
     int getOpponentPlayerLives() const { return opponentPlayerLives; }
-    const std::vector<ServerBulletState>& getOpponentBulletStates() const { return m_opponentBulletStates; } // <--- NUEVO: Getter para balas del servidor
+    const std::vector<ServerBulletState>& getOpponentBulletStates() const { return m_opponentBulletStates; }  
 
     bool isConnectedToGameServer() const { return m_isConnectedToGameServer; }
     void receiveAndProcessGameData();
     void sendPlayerInput(float moveDir, bool wantsToShoot, bool jumpRequestedThisTick); 
     void addSentInputToHistory(const ClientInputRecord& input);
 
-   // void sendPlayerTaunt(); // enviar la notificación de burla
-   // void playTauntSound();  //  función para reproducir el sonido localmente
+   // void sendPlayerTaunt();  
+   // void playTauntSound();   
 };

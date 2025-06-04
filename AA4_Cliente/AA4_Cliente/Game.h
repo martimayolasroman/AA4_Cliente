@@ -11,7 +11,7 @@
 #include <algorithm>
 
 #include "Player.h"
-#include "Bullet.h" // Asegúrate de que Bullet.h incluye sf::CircleShape
+#include "Bullet.h" 
 
 // --- Constantes de Color ---
 const sf::Color COLOR_BACKGROUND(236, 236, 236);
@@ -24,7 +24,7 @@ const sf::Color COLOR_GAMEOVER_RED(sf::Color::Red);
 const sf::Color COLOR_OPPONENT_GREEN(sf::Color::Green);
 
 
-// --- Constantes de Juego (Añadidas/Modificadas para balas) ---
+// --- Constantes de Juego 
 const unsigned int WINDOW_WIDTH = 1024;
 const unsigned int WINDOW_HEIGHT = 768;
 const float TILE_SIZE = 32.0f;
@@ -46,9 +46,9 @@ const float SHOOT_COOLDOWN = 2.0f;
 
 // --- Constantes para Interpolación ---
 const float INTERPOLATION_DELAY_SECONDS = 0.1f;
-const float FIXED_DELTA_TIME = 1.0f / 60.0f; // Vuelvo a 1/60, ya que el servidor usa 16ms (~1/62.5). 1/60 es más común.
+const float FIXED_DELTA_TIME = 1.0f / 60.0f; 
 
-// NUEVA ESTRUCTURA: Para interpolar balas del oponente
+// Interpolar balas del oponente
 struct InterpolatedBullet {
     sf::CircleShape shape;
     sf::Vector2f currentPosition;
@@ -56,20 +56,18 @@ struct InterpolatedBullet {
     sf::Vector2f previousPosition;
     sf::Time previousTimestamp;
     bool hasReceivedFirstUpdate;
-    bool isActive; // Si la bala se ha autodestruido o chocado en el servidor
+    bool isActive; 
 
-    // Constructor para inicializar una bala interpolada
-    InterpolatedBullet(sf::Vector2f pos, float radius) :
+     InterpolatedBullet(sf::Vector2f pos, float radius) :
         currentPosition(pos), previousPosition(pos),
         hasReceivedFirstUpdate(false), isActive(true)
     {
         shape.setRadius(radius);
-        shape.setFillColor(COLOR_BULLET_YELLOW); // O un color diferente para balas del oponente
+        shape.setFillColor(COLOR_BULLET_YELLOW); 
         shape.setPosition(pos);
     }
 
-    // Método para actualizar la posición para interpolación
-    void updateInterpolation(sf::Vector2f newPos, sf::Time newTimestamp) {
+     void updateInterpolation(sf::Vector2f newPos, sf::Time newTimestamp) {
         if (!hasReceivedFirstUpdate) {
             previousPosition = newPos;
             previousTimestamp = newTimestamp;
@@ -100,8 +98,8 @@ public:
 private:
     float m_currentMoveDirection;
     bool m_jumpRequestedThisFrame;
-    bool m_shootRequestedThisFrame; // Para la solicitud de disparo de este frame
-    float m_playerShootCooldown;    // Timer de cooldown del jugador local
+    bool m_shootRequestedThisFrame;  
+    float m_playerShootCooldown;    
 
     sf::RenderWindow* m_window;
     Client* m_client;
@@ -112,8 +110,8 @@ private:
     bool m_gameHasStarted = false;
 
     std::vector<sf::RectangleShape> m_platforms;
-    std::vector<Bullet> m_predictedMyBullets; // Balas predichas por mi cliente
-    std::vector<InterpolatedBullet> m_interpolatedOpponentBullets; // Balas del oponente (del servidor)
+    std::vector<Bullet> m_predictedMyBullets;  
+    std::vector<InterpolatedBullet> m_interpolatedOpponentBullets; 
 
     sf::Font m_font;
     bool m_fontLoaded = false;
