@@ -29,6 +29,19 @@ struct ClientInputRecord {
     bool jumpRequested; // <--- NUEVO: Flag para la solicitud de salto
 };
 
+// <--- NUEVA ESTRUCTURA: Para pasar el estado de la bala del servidor al cliente para interpolación
+struct ServerBulletState {
+    sf::Vector2f position;
+    sf::Vector2f velocity; // Podrías necesitar esto si quieres interpolar velocidad
+    float radius;
+    bool isActive; // Para saber si la bala existe
+    int ownerPlayerId; // Opcional, si el cliente necesita saber quién disparó
+    sf::Time timestamp; // <--- NUEVO: Timestamp de cuando el servidor generó este estado
+
+    ServerBulletState(sf::Vector2f pos = { 0,0 }, sf::Vector2f vel = { 0,0 }, float r = 0, bool active = false, int owner = 0, sf::Time ts = sf::Time::Zero)
+        : position(pos), velocity(vel), radius(r), isActive(active), ownerPlayerId(owner), timestamp(ts) {}
+};
+
 class Client {
 private:
     static Client* instanceClient;
@@ -57,6 +70,8 @@ private:
     sf::Vector2f myPlayerPosition = { -1.f, -1.f }; // ¡OJO! Esta ya no se usa para la posición directa del jugador local
     int myPlayerHealth = 0;
     int myPlayerLives = 0;
+
+    std::vector<ServerBulletState> m_opponentBulletStates;
 
     // Para la reconciliación y el estado autoritativo del jugador local
     sf::Vector2f m_lastServerConfirmedMyPlayerPosition;
@@ -121,6 +136,7 @@ public:
     const OpponentInterpolationState& getOpponentInterpolationState() const { return opponentInterpolationState; }
     int getOpponentPlayerHealth() const { return opponentPlayerHealth; }
     int getOpponentPlayerLives() const { return opponentPlayerLives; }
+    const std::vector<ServerBulletState>& getOpponentBulletStates() const { return m_opponentBulletStates; } // <--- NUEVO: Getter para balas del servidor
 
     bool isConnectedToGameServer() const { return m_isConnectedToGameServer; }
     void receiveAndProcessGameData();

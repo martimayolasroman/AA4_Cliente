@@ -22,10 +22,10 @@ private:
     float buttonYPos = 300.f;
     sf::Vector2f buttonSize = { 350.f, 60.f };
 
-    sf::Color backgroundColor = sf::Color(230, 230, 230);
-    sf::Color buttonColor = sf::Color(70, 130, 180);
+    sf::Color backgroundColor = sf::Color::White;
+    sf::Color buttonColor = sf::Color(255, 165, 0);
     sf::Color buttonTextColor = sf::Color::White;
-    sf::Color titleTextColor = sf::Color(50, 50, 50);
+    sf::Color titleTextColor = sf::Color(255, 165, 0);
 
     sf::Font font; // Se carga en el constructor
     bool fontLoadedSuccessfully = false; // Flag para saber si la fuente cargó

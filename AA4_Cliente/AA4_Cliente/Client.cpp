@@ -251,6 +251,8 @@ void Client::connectToGameServerUDP() {
 
     udpPacketReceiveClock.restart();
     opponentInterpolationState = OpponentInterpolationState();
+    m_opponentBulletStates.clear(); // <--- NUEVO: Limpiar balas del oponente al inicio de la partida
+
 }
 
 void Client::receiveAndProcessGameData() {
@@ -336,6 +338,33 @@ void Client::processGamePacket(sf::Packet& udp_packet) {
                     opponentInterpolationState.hasReceivedEnoughUpdatesForInterpolation = true;
                 }
             }
+            // <--- NUEVO: Procesar estado de las balas del servidor
+            int numBullets;
+            if (udp_packet >> numBullets) {
+                m_opponentBulletStates.clear(); // Limpiar la lista actual de balas del oponente
+                for (int i = 0; i < numBullets; ++i) {
+                    float bx, by, bvx, bvy, br;
+                    bool bactive;
+                    int bownerId;
+                    // El servidor envía también el ownerId y active status
+                    if (udp_packet >> bx >> by >> bvx >> bvy >> br >> bactive >> bownerId) {
+                        // Solo añadir a la lista si la bala pertenece al otro jugador
+                        // (o si quieres ver tus propias balas confirmadas por el servidor aquí también)
+                        if ((m_amIPlayerOne && bownerId == 2) || (!m_amIPlayerOne && bownerId == 1)) {
+                            // Almacenar el estado de la bala del servidor con el timestamp de recepción
+                            m_opponentBulletStates.emplace_back(
+                                sf::Vector2f(bx, by), sf::Vector2f(bvx, bvy), br, bactive, bownerId, receptionTime
+                            );
+                        }
+                    }
+                    else {
+                        std::cerr << "[Client-UDP] Error deserializando datos de una bala del paquete S_GAME_STATE." << std::endl;
+                        break; // Salir del bucle si hay error en una bala
+                    }
+                }
+            }
+
+
         }
         else {
             std::cerr << "[Client-UDP] Error deserializando S_GAME_STATE (faltan campos de velocidad/onGround?)." << std::endl;
