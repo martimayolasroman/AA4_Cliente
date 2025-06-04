@@ -8,7 +8,7 @@
 #include <string>
 #include <sstream>
 #include <optional>
-#include <algorithm> // Para std::min/max
+#include <algorithm>
 
 #include "Player.h"
 #include "Bullet.h"
@@ -30,22 +30,24 @@ const unsigned int WINDOW_HEIGHT = 768;
 const float TILE_SIZE = 32.0f;
 
 const float PLAYER_SPEED = 250.0f;
-const float JUMP_STRENGTH = 550.0f;
+const float JUMP_STRENGTH = 650.0f;
 const float GRAVITY = 1200.0f;
 const float PLAYER_WIDTH = TILE_SIZE * 0.9f;
 const float PLAYER_HEIGHT = TILE_SIZE * 1.4f;
 const int PLAYER_HEALTH_MAX = 5;
 const int PLAYER_LIVES_MAX = 3;
 const float RESPAWN_X = 100.0f;
-const float RESPAWN_Y = 100.0f;
+const float RESPAWN_Y = 500.0f;
 
 const float BULLET_SPEED = 500.0f;
 const float BULLET_WIDTH = 10.0f;
 const float BULLET_HEIGHT = 5.0f;
 const float SHOOT_COOLDOWN = 0.5f;
 
-const float INTERPOLATION_DELAY_SECONDS = 0.1f; // 100ms. Ajusta este valor.
-const float FIXED_DELTA_TIME = 1.0f / 60.0f; // Aproximadamente 60 ticks por segundo para la simulación de predicción/reconciliación
+
+// --- Constantes para Interpolación ---
+const float INTERPOLATION_DELAY_SECONDS = 0.1f;
+const float FIXED_DELTA_TIME = 1.0f / 60.0f; // Para predicción. Idealmente igual al tick del servidor.
 
 
 class Client; // Forward declaration
@@ -57,18 +59,14 @@ public:
     void run();
 
 private:
-
-
-    void applyPlayerMovement(Player& player, float moveDir, /*bool jumpPressed,*/ float deltaTime); // Función de ayuda para la física
-    void reconcilePlayer(); // Nueva función para la lógica de reconciliación
-
-    float m_currentMoveDirection; // Input actual para el jugador local
+    float m_currentMoveDirection;
+    bool m_jumpRequestedThisFrame; // <--- NUEVO: Para la solicitud de salto de este frame
 
     sf::RenderWindow* m_window;
     Client* m_client;
 
     Player m_player;
-    Player m_opponentPlayer; // Se usará para dibujar al oponente interpolado
+    Player m_opponentPlayer;
     bool m_gameHasStarted = false;
 
     std::vector<sf::RectangleShape> m_platforms;
@@ -83,12 +81,16 @@ private:
     sf::Text* m_gameOverText;
     sf::Text* m_waitingText;
 
-    float m_accumulatedTimeForPrediction;
-
     bool m_gameOverState;
-    sf::Clock m_gameLogicClock; // Reloj para deltaTime de la lógica local del juego
-    sf::Clock m_interpolationRenderClock; // Reloj para el tiempo de renderizado de la interpolación
+    sf::Clock m_gameLogicClock;
+    sf::Clock m_interpolationRenderClock;
+
+    float m_accumulatedTimeForPrediction;
 
     void centerTextOrigin(sf::Text& text);
     std::vector<sf::RectangleShape> loadMap(const std::string& filename);
+
+    // Funciones para lógica de jugador y reconciliación
+    void applyPlayerMovement(Player& player, float moveDir, bool jumpRequested, float deltaTime); // <--- MODIFICADO
+    void reconcilePlayer(); // Reconciliación simple
 };

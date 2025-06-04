@@ -1,8 +1,9 @@
 #include "Game.h"
-#include "Client.h" 
+#include "Client.h"
 #include <SFML/Window/Event.hpp>
 #include <iostream>
-#include <algorithm> // Para std::min/max
+#include <algorithm>
+#include <cmath> // Para std::sqrt
 
 std::vector<sf::RectangleShape> Game::loadMap(const std::string& filename) {
     std::vector<sf::RectangleShape> platforms_map;
@@ -41,8 +42,6 @@ std::vector<sf::RectangleShape> Game::loadMap(const std::string& filename) {
 void Game::centerTextOrigin(sf::Text& text) {
     if (!m_fontLoaded) return;
     sf::FloatRect text_bounds = text.getLocalBounds();
-    // Usando la sintaxis de tu último Game.cpp para setOrigin
-    // Esto asume que tu sf::FloatRect tiene un miembro 'size' de tipo sf::Vector2f
     text.setOrigin({ text_bounds.size.x / 2.f, text_bounds.size.y / 2.f });
 }
 
@@ -58,7 +57,9 @@ Game::Game(sf::RenderWindow* window, Client* client_instance)
     m_gameOverText(nullptr),
     m_waitingText(nullptr),
     m_gameOverState(false),
-    m_currentMoveDirection(0.f) // Inicializar aquí
+    m_currentMoveDirection(0.f),
+    m_jumpRequestedThisFrame(false), // <--- NUEVO: Inicializar
+    m_accumulatedTimeForPrediction(0.f)
 {
     if (!m_client) {
         std::cerr << "CRITICAL: Game_constructor - Client instance is null!" << std::endl;
@@ -112,6 +113,120 @@ Game::~Game() {
     delete m_waitingText;
 }
 
+// Lógica de movimiento/física que se usará para predicción y re-simulación
+void Game::applyPlayerMovement(Player& player, float moveDirInput, bool jumpRequestedThisTick, float deltaTime) { // <--- MODIFICADO
+    // Aplicar movimiento horizontal
+    if (moveDirInput < 0) {
+        player.velocity.x = -PLAYER_SPEED; player.facingRight = false;
+    }
+    else if (moveDirInput > 0) {
+        player.velocity.x = PLAYER_SPEED; player.facingRight = true;
+    }
+    else {
+        player.velocity.x = 0;
+    }
+
+    // Aplicar salto si se solicitó y el jugador está en el suelo (predicción cliente)
+    if (jumpRequestedThisTick && player.onGround) { // <--- NUEVO: Procesar solicitud de salto
+        player.velocity.y = -JUMP_STRENGTH;
+        player.onGround = false;
+    }
+
+    // Aplicar gravedad
+    if (!player.onGround) {
+        player.velocity.y += GRAVITY * deltaTime;
+    }
+
+    // Mover primero en Y y luego en X para colisiones (es un orden común)
+    player.shape.move({ 0.f, player.velocity.y * deltaTime });
+    player.onGround = false; // Asumir que ya no está en el suelo hasta que se detecte colisión
+    sf::FloatRect playerBounds = player.shape.getGlobalBounds();
+
+    for (const auto& platform : m_platforms) {
+        std::optional<sf::FloatRect> intersection = playerBounds.findIntersection(platform.getGlobalBounds());
+        if (intersection) {
+            if (player.velocity.y > 0) { // Moviéndose hacia abajo, chocó con el suelo
+                player.shape.setPosition({ playerBounds.position.x, intersection->position.y - playerBounds.size.y });
+                player.onGround = true;
+                player.velocity.y = 0; // Detener movimiento vertical
+            }
+            else if (player.velocity.y < 0) { // Moviéndose hacia arriba, chocó con el techo
+                player.shape.setPosition({ playerBounds.position.x, intersection->position.y + intersection->size.y });
+                player.velocity.y = 0; // Detener movimiento vertical
+            }
+            playerBounds = player.shape.getGlobalBounds(); // Actualizar bounds después del movimiento vertical
+            break;
+        }
+    }
+
+    // Mover en X
+    player.shape.move({ player.velocity.x * deltaTime, 0.f });
+    playerBounds = player.shape.getGlobalBounds(); // Actualizar bounds después del movimiento horizontal
+
+    for (const auto& platform : m_platforms) {
+        std::optional<sf::FloatRect> intersection = playerBounds.findIntersection(platform.getGlobalBounds());
+        if (intersection) {
+            if (player.velocity.x > 0) { // Moviéndose a la derecha, chocó con una pared
+                player.shape.setPosition({ intersection->position.x - playerBounds.size.x, playerBounds.position.y });
+            }
+            else if (player.velocity.x < 0) { // Moviéndose a la izquierda, chocó con una pared
+                player.shape.setPosition({ intersection->position.x + intersection->size.x, playerBounds.position.y });
+            }
+            player.velocity.x = 0; // Detener movimiento horizontal
+            playerBounds = player.shape.getGlobalBounds(); // Actualizar bounds
+            break;
+        }
+    }
+
+    // Límites de pantalla (ajuste si el jugador sale de los límites horizontales)
+    if (player.shape.getPosition().x < 0.f) { player.shape.setPosition({ 0.f, player.shape.getPosition().y }); }
+    if (player.shape.getPosition().x + playerBounds.size.x > WINDOW_WIDTH) { player.shape.setPosition({ WINDOW_WIDTH - playerBounds.size.x, player.shape.getPosition().y }); }
+    // Considerar límites Y también para caídas mortales o techos si es necesario
+}
+
+// RECONCILIACIÓN SIMPLE: AJUSTAR POSICIÓN, VELOCIDAD Y ONGROUND
+void Game::reconcilePlayer() {
+    if (!m_client->hasNewServerState()) {
+        return; // No hay nuevo estado del servidor para procesar
+    }
+
+    sf::Vector2f serverPosition = m_client->getLastServerConfirmedMyPlayerPosition();
+    sf::Vector2f currentPredictedPos = m_player.shape.getPosition();
+    m_client->consumeServerStateFlag(); // Marcar el estado del servidor como procesado
+
+    float diffX = currentPredictedPos.x - serverPosition.x;
+    float diffY = currentPredictedPos.y - serverPosition.y;
+    float distance = std::sqrt(diffX * diffX + diffY * diffY);
+
+    const float RECONCILIATION_THRESHOLD = 1.0f; // Umbral de distancia en píxeles para reconciliar
+
+    // También comprobamos si la velocidad o el estado onGround difieren
+    bool velocityDiffers = (m_player.velocity != m_client->getMyPlayerServerVelocity());
+    bool onGroundDiffers = (m_player.onGround != m_client->getMyPlayerOnGround());
+
+    if (distance > RECONCILIATION_THRESHOLD || velocityDiffers || onGroundDiffers) { // <--- MODIFICADO: Reconciliar también por velocidad/onGround
+        std::cout << "[Game RECONCILE - SIMPLE] DISCREPANCY! Snapping player to server state. Distance: " << distance
+            << " VelocityDiff: " << (velocityDiffers ? "YES" : "NO")
+            << " OnGroundDiff: " << (onGroundDiffers ? "YES" : "NO") << std::endl;
+
+        std::cout << "  Server Pos: (" << serverPosition.x << "," << serverPosition.y
+            << ") Vel: (" << m_client->getMyPlayerServerVelocity().x << "," << m_client->getMyPlayerServerVelocity().y
+            << ") OnGround: " << (m_client->getMyPlayerOnGround() ? "True" : "False") << std::endl;
+        std::cout << "  Predicted Pos: (" << currentPredictedPos.x << "," << currentPredictedPos.y
+            << ") Vel: (" << m_player.velocity.x << "," << m_player.velocity.y
+            << ") OnGround: " << (m_player.onGround ? "True" : "False") << std::endl;
+
+        m_player.shape.setPosition(serverPosition);
+        m_player.velocity = m_client->getMyPlayerServerVelocity(); // <--- NUEVO: Ajustar velocidad
+        m_player.onGround = m_client->getMyPlayerOnGround();     // <--- NUEVO: Ajustar onGround
+
+        //std::cout << "  Player state AFTER snap: Pos(" << m_player.shape.getPosition().x << "," << m_player.shape.getPosition().y
+        //    << ") Vel(" << m_player.velocity.x << "," << m_player.velocity.y
+        //    << ") OnGround(" << m_player.onGround ? "True" : "False" << ")" << std::endl;
+    }
+}
+
+// GAME::RUN (copiado de tu versión anterior, con llamadas a reconcilePlayer y applyPlayerMovement)
 void Game::run() {
     if (!m_client || !m_window) {
         std::cerr << "[Game] Error: Client o Window no proporcionado a Game::run(). Saliendo." << std::endl;
@@ -126,8 +241,9 @@ void Game::run() {
         float frameDeltaTime = m_gameLogicClock.restart().asSeconds();
         m_accumulatedTimeForPrediction += frameDeltaTime;
 
-        bool shootPressedThisFrame = false;
+        bool shootPressedThisFrame = false; // Puedes activar esto con tu lógica de disparo
         float newMoveDirectionInput = m_currentMoveDirection;
+        m_jumpRequestedThisFrame = false; // <--- NUEVO: Resetear cada frame para que sea un evento de un solo tick
 
         std::optional<sf::Event> opt_event;
         while ((opt_event = m_window->pollEvent())) {
@@ -144,22 +260,23 @@ void Game::run() {
                     else if (keyPressed->code == sf::Keyboard::Key::D || keyPressed->code == sf::Keyboard::Key::Right) {
                         newMoveDirectionInput = 1.f;
                     }
-                    if ((keyPressed->code == sf::Keyboard::Key::W || keyPressed->code == sf::Keyboard::Key::Up || keyPressed->code == sf::Keyboard::Key::Space) && m_player.onGround) {
-                        m_player.velocity.y = -JUMP_STRENGTH;
-                        m_player.onGround = false;
+                    if (keyPressed->code == sf::Keyboard::Key::W || keyPressed->code == sf::Keyboard::Key::Up || keyPressed->code == sf::Keyboard::Key::Space) {
+                        m_jumpRequestedThisFrame = true; // <--- NUEVO: Activar flag de salto
                     }
-                    // if (keyPressed->code == sf::Keyboard::Key::Enter) shootPressedThisFrame = true; // Ejemplo
+                    // if (keyPressed->code == sf::Keyboard::Key::Enter) shootPressedThisFrame = true; // Ejemplo de disparo
                 }
                 if (const auto* keyReleased = event.getIf<sf::Event::KeyReleased>()) {
                     if (((keyReleased->code == sf::Keyboard::Key::A || keyReleased->code == sf::Keyboard::Key::Left) && newMoveDirectionInput < 0) ||
                         ((keyReleased->code == sf::Keyboard::Key::D || keyReleased->code == sf::Keyboard::Key::Right) && newMoveDirectionInput > 0)) {
                         newMoveDirectionInput = 0.f;
                     }
+                    // No resetear m_jumpRequestedThisFrame en keyReleased, ya que es un evento de un solo disparo por pulsación
                 }
             }
         }
         m_currentMoveDirection = newMoveDirectionInput;
 
+        // 2. PROCESAR DATOS DE RED Y RECONCILIACIÓN
         if (m_client->isConnectedToGameServer()) {
             m_client->receiveAndProcessGameData();
 
@@ -168,6 +285,9 @@ void Game::run() {
                 m_interpolationRenderClock.restart();
                 if (m_waitingText && m_fontLoaded) m_waitingText->setString("Partida Encontrada!");
                 m_player.shape.setPosition(m_client->getLastServerConfirmedMyPlayerPosition());
+                // <--- NUEVO: Inicializar velocidad y onGround al inicio del juego con valores del servidor
+                m_player.velocity = m_client->getMyPlayerServerVelocity();
+                m_player.onGround = m_client->getMyPlayerOnGround();
             }
             if (m_gameHasStarted) {
                 m_player.health = m_client->getMyPlayerHealth();
@@ -175,11 +295,7 @@ void Game::run() {
             }
 
             if (m_gameHasStarted && !m_gameOverState) {
-                // Añadir log antes de llamar a reconcilePlayer
-                // if (m_client->hasNewServerState()) {
-                //     std::cout << "[Game::run] Client has new server state. Calling reconcilePlayer()." << std::endl;
-                // }
-                reconcilePlayer();
+                reconcilePlayer(); // Reconcilia el estado del jugador local
             }
         }
         else if (m_client->hasMatchBeenFound() && m_waitingText && m_fontLoaded) {
@@ -189,26 +305,29 @@ void Game::run() {
             m_waitingText->setString("Buscando partida...");
         }
 
+        // 3. PREDICCIÓN DEL JUGADOR LOCAL (con timestep fijo)
         if (m_gameHasStarted && !m_gameOverState) {
             while (m_accumulatedTimeForPrediction >= FIXED_DELTA_TIME) {
-                applyPlayerMovement(m_player, m_currentMoveDirection, FIXED_DELTA_TIME);
+                // Pasar la solicitud de salto a applyPlayerMovement para la predicción local
+                applyPlayerMovement(m_player, m_currentMoveDirection, m_jumpRequestedThisFrame, FIXED_DELTA_TIME); // <--- MODIFICADO: Pasar jumpRequestedThisFrame
 
                 if (m_client->isConnectedToGameServer()) {
-                    m_client->sendPlayerInput(m_currentMoveDirection, shootPressedThisFrame);
+                    // Enviar la solicitud de salto al servidor
+                    m_client->sendPlayerInput(m_currentMoveDirection, shootPressedThisFrame, m_jumpRequestedThisFrame); // <--- MODIFICADO: Enviar jumpRequestedThisFrame
                 }
+                // Si m_jumpRequestedThisFrame fue true en este tick de predicción, se considera "consumido" para el siguiente tick.
                 // shootPressedThisFrame = false; // Resetear si es un evento de un solo frame
+
                 m_accumulatedTimeForPrediction -= FIXED_DELTA_TIME;
             }
         }
 
-        if (m_player.lives <= 0 && !m_gameOverState && m_gameHasStarted) { // Solo si el juego ha empezado
+        if (m_player.lives <= 0 && !m_gameOverState && m_gameHasStarted) {
             m_gameOverState = true;
-            // ...
         }
 
-        // INTERPOLACIÓN DEL OPONENTE (sin cambios)
+        // INTERPOLACIÓN DEL OPONENTE (sin cambios, la lógica ya estaba)
         if (m_gameHasStarted && m_client->isConnectedToGameServer() && !m_gameOverState) {
-            // ... (tu código de interpolación de oponente)
             const OpponentInterpolationState& oppState = m_client->getOpponentInterpolationState();
             m_opponentPlayer.health = m_client->getOpponentPlayerHealth();
             m_opponentPlayer.lives = m_client->getOpponentPlayerLives();
@@ -243,11 +362,9 @@ void Game::run() {
             }
         }
 
-
         // RENDERIZADO (sin cambios)
         m_window->clear(COLOR_BACKGROUND);
         for (const auto& platform : m_platforms) { m_window->draw(platform); }
-        // for (const auto& bullet : m_bullets) { m_window->draw(bullet.shape); }
 
         if (m_gameHasStarted) {
             m_window->draw(m_player.shape);
@@ -255,8 +372,8 @@ void Game::run() {
                 m_window->draw(m_opponentPlayer.shape);
             }
             if (m_fontLoaded) {
-                if (m_healthText) { /* ... */ m_healthText->setString("Health: " + std::to_string(m_player.health)); m_window->draw(*m_healthText); }
-                if (m_livesText) { /* ... */ m_livesText->setString("Lives: " + std::to_string(m_player.lives)); m_window->draw(*m_livesText); }
+                if (m_healthText) { m_healthText->setString("Health: " + std::to_string(m_player.health)); m_window->draw(*m_healthText); }
+                if (m_livesText) { m_livesText->setString("Lives: " + std::to_string(m_player.lives)); m_window->draw(*m_livesText); }
             }
         }
         else if (m_waitingText && m_fontLoaded) {
@@ -271,90 +388,4 @@ void Game::run() {
             break;
         }
     }
-}
-
-void Game::applyPlayerMovement(Player& player, float moveDirInput, float deltaTime) {
-    if (moveDirInput < 0) {
-        player.velocity.x = -PLAYER_SPEED; player.facingRight = false;
-    }
-    else if (moveDirInput > 0) {
-        player.velocity.x = PLAYER_SPEED; player.facingRight = true;
-    }
-    else {
-        player.velocity.x = 0;
-    }
-
-    if (!player.onGround) {
-        player.velocity.y += GRAVITY * deltaTime;
-    }
-    player.shape.move({ player.velocity.x * deltaTime, 0.f });
-    sf::FloatRect playerBounds = player.shape.getGlobalBounds();
-
-    for (const auto& platform : m_platforms) {
-        std::optional<sf::FloatRect> intersection = playerBounds.findIntersection(platform.getGlobalBounds());
-        if (intersection) {
-            if (player.velocity.x > 0) {
-                player.shape.setPosition({ intersection->position.x - playerBounds.size.x, playerBounds.position.y });
-            }
-            else if (player.velocity.x < 0) {
-                player.shape.setPosition({ intersection->position.x + intersection->size.x, playerBounds.position.y });
-            }
-            player.velocity.x = 0;
-            playerBounds = player.shape.getGlobalBounds();
-            break;
-        }
-    }
-
-    player.shape.move({ 0.f, player.velocity.y * deltaTime });
-    player.onGround = false;
-    playerBounds = player.shape.getGlobalBounds();
-
-    for (const auto& platform : m_platforms) {
-        std::optional<sf::FloatRect> intersection = playerBounds.findIntersection(platform.getGlobalBounds());
-        if (intersection) {
-            if (player.velocity.y > 0) {
-                player.shape.setPosition({ playerBounds.position.x, intersection->position.y - playerBounds.size.y });
-                player.onGround = true; player.velocity.y = 0;
-            }
-            else if (player.velocity.y < 0) {
-                player.shape.setPosition({ playerBounds.position.x, intersection->position.y + intersection->size.y });
-                player.velocity.y = 0;
-            }
-            playerBounds = player.shape.getGlobalBounds();
-            break;
-        }
-    }
-    if (player.shape.getPosition().x < 0.f) { player.shape.setPosition({ 0.f, player.shape.getPosition().y }); }
-    if (player.shape.getPosition().x + playerBounds.size.x > WINDOW_WIDTH) { player.shape.setPosition({ WINDOW_WIDTH - playerBounds.size.x, player.shape.getPosition().y }); }
-}
-
-// RECONCILIACIÓN SIMPLE: AJUSTAR POSICIÓN SIN RE-SIMULACIÓN DE INPUTS
-void Game::reconcilePlayer() {
-    if (!m_client->hasNewServerState()) {
-        return; // No hay nuevo estado del servidor para procesar
-    }
-
-    sf::Vector2f serverPosition = m_client->getLastServerConfirmedMyPlayerPosition();
-    sf::Vector2f currentPredictedPos = m_player.shape.getPosition();
-    m_client->consumeServerStateFlag(); // Marcar el estado del servidor como procesado
-
-    float diffX = currentPredictedPos.x - serverPosition.x;
-    float diffY = currentPredictedPos.y - serverPosition.y;
-    float distance = std::sqrt(diffX * diffX + diffY * diffY);
-
-    const float RECONCILIATION_THRESHOLD = 1.0f; // Umbral de distancia para reconciliar
-
-    if (distance > RECONCILIATION_THRESHOLD) {
-        std::cout << "[Game RECONCILE - SIMPLE] DISCREPANCY! Snapping player to server position. Distance: " << distance << std::endl;
-        std::cout << "  Server position to set: (" << serverPosition.x << "," << serverPosition.y << ")" << std::endl;
-        std::cout << "  Player position BEFORE snap: (" << m_player.shape.getPosition().x << "," << m_player.shape.getPosition().y << ")" << std::endl;
-
-        m_player.shape.setPosition(serverPosition);
-
-        // Opcional: Resetear velocidad si la discrepancia es muy grande y no quieres que la predicción continúe con una velocidad "incorrecta"
-        // m_player.velocity = {0.f, 0.f}; // O la velocidad que el servidor pudiera enviar.
-
-        std::cout << "  Player position AFTER snap: (" << m_player.shape.getPosition().x << "," << m_player.shape.getPosition().y << ")" << std::endl;
-    }
-    // No hay re-simulación de inputs pendientes aquí. La predicción normal en Game::run tomará el relevo.
 }

@@ -1,4 +1,3 @@
-// Client.h
 #pragma once
 #include <SFML/Network.hpp>
 #include <cstdint>
@@ -27,7 +26,7 @@ struct OpponentInterpolationState {
 struct ClientInputRecord {
     float moveDirection;
     bool wantsToShoot;
-    // unsigned int sequenceNumber; // Si decides usar números de secuencia en el futuro
+    bool jumpRequested; // <--- NUEVO: Flag para la solicitud de salto
 };
 
 class Client {
@@ -59,9 +58,11 @@ private:
     int myPlayerHealth = 0;
     int myPlayerLives = 0;
 
-    // Para la reconciliación simple
+    // Para la reconciliación y el estado autoritativo del jugador local
     sf::Vector2f m_lastServerConfirmedMyPlayerPosition;
     bool m_newServerStateReceived; // Flag para Game.cpp
+    bool m_myPlayerOnGround;          // <--- NUEVO: Estado onGround del servidor
+    sf::Vector2f m_myPlayerServerVelocity; // <--- NUEVO: Velocidad del servidor
 
     // Historial de inputs enviados
     std::deque<ClientInputRecord> m_pendingInputs;
@@ -109,10 +110,12 @@ public:
     int getMyPlayerHealth() const { return myPlayerHealth; }
     int getMyPlayerLives() const { return myPlayerLives; }
 
-    // Para la reconciliación
+    // Para la reconciliación y el estado autoritativo
     sf::Vector2f getLastServerConfirmedMyPlayerPosition() const { return m_lastServerConfirmedMyPlayerPosition; }
     bool hasNewServerState() const { return m_newServerStateReceived; }
     void consumeServerStateFlag() { m_newServerStateReceived = false; }
+    bool getMyPlayerOnGround() const { return m_myPlayerOnGround; }          // <--- NUEVO
+    sf::Vector2f getMyPlayerServerVelocity() const { return m_myPlayerServerVelocity; } // <--- NUEVO
 
     // Para el oponente (usado por Game.cpp para interpolar)
     const OpponentInterpolationState& getOpponentInterpolationState() const { return opponentInterpolationState; }
@@ -121,10 +124,6 @@ public:
 
     bool isConnectedToGameServer() const { return m_isConnectedToGameServer; }
     void receiveAndProcessGameData();
-    void sendPlayerInput(float moveDir, bool wantsToShoot);
-
-    // Gestión del historial de inputs (simplificado)
+    void sendPlayerInput(float moveDir, bool wantsToShoot, bool jumpRequestedThisTick); // <--- MODIFICADO
     void addSentInputToHistory(const ClientInputRecord& input);
-    // const std::deque<ClientInputRecord>& getPendingInputs() const { return m_pendingInputs; } // No necesaria para reconciliación simple
-    // void clearAllPendingInputs() { m_pendingInputs.clear(); } // No necesaria para reconciliación simple si solo se limita
 };

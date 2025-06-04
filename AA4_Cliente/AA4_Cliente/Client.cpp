@@ -1,65 +1,44 @@
 #include "Client.h"
 #include <SFML/System/Sleep.hpp>
-#include <SFML/System/Clock.hpp> // Para obtener el tiempo actual
+#include <SFML/System/Clock.hpp>
 
 // Definición local de PacketType (DEBE COINCIDIR CON EL SERVIDOR DE SERVICIOS)
 // Y también con el Servidor Dedicado para los tipos relevantes
 enum PacketType {
-    // Cliente -> Servidor de Servicios (TCP)
-    C_REQUEST_LOGIN = 1,                // Server.cpp (Servicios) tiene LOGIN = 1
-    C_REQUEST_REGISTER = 2,             // Server.cpp (Servicios) tiene REGISTER = 2
-    C_REQUEST_MATCHMAKING_FRIENDLY = 3, // Server.cpp (Servicios) NECESITA AÑADIR ESTO con valor 3
-    C_MAP_RECEIVED_ACK = 4,             // No implementado aún completamente
-
-    // Cliente <-> Servidor Dedicado (UDP)
-    C_PLAYER_INPUT = 5,                 // GameRoom.h tiene GR_C_PLAYER_INPUT = 5 (OK)
-
-    // Servidor de Servicios -> Cliente (TCP)
-    S_MAP_DATA = 100,                   // Server.cpp (Servicios) NECESITA AÑADIR ESTO con valor 100
-    S_LOGIN_OK = 101,                   // Server.cpp (Servicios) tiene LOGIN_OK = 6 ¡¡¡NO COINCIDE!!!
-    S_LOGIN_FAIL = 102,                 // Server.cpp (Servicios) tiene LOGIN_FAIL = 7 ¡¡¡NO COINCIDE!!!
-    S_REGISTER_OK = 103,                // Server.cpp (Servicios) tiene REGISTER_OK = 8 ¡¡¡NO COINCIDE!!!
-    S_REGISTER_FAIL = 104,              // Server.cpp (Servicios) tiene REGISTER_FAIL = 9 ¡¡¡NO COINCIDE!!!
-    S_ADDED_TO_MATCHMAKING_QUEUE = 105, // Server.cpp (Servicios) NECESITA AÑADIR ESTO con valor 105
-    S_MATCH_FOUND = 106,                // Server.cpp (Servicios) NECESITA AÑADIR ESTO con valor 106
-
-    // Servidor Dedicado -> Cliente (UDP)
-    S_GAME_STATE = 107,                 // GameRoom.h tiene GR_S_GAME_STATE = 107 (OK)
-
-    // Servidor de Servicios -> Cliente (TCP)
-    S_ERROR_GENERAL = 108,              // Server.cpp (Servicios) podría usar esto con valor 108
+    C_REQUEST_LOGIN = 1, C_REQUEST_REGISTER = 2, C_REQUEST_MATCHMAKING_FRIENDLY = 3, C_MAP_RECEIVED_ACK = 4,
+    C_PLAYER_INPUT = 5,
+    S_MAP_DATA = 100, S_LOGIN_OK = 101, S_LOGIN_FAIL = 102, S_REGISTER_OK = 103, S_REGISTER_FAIL = 104,
+    S_ADDED_TO_MATCHMAKING_QUEUE = 105, S_MATCH_FOUND = 106,
+    S_GAME_STATE = 107,
+    S_ERROR_GENERAL = 108,
     UNKNOWN = 255
 };
 
-// Reloj global para timestamps de paquetes UDP (si no vienen del servidor)
 sf::Clock udpPacketReceiveClock;
 
-
 inline sf::Packet& operator >> (sf::Packet& packet, PacketType& tipo) {
-    int temp;
-    packet >> temp;
-    tipo = static_cast<PacketType>(temp);
-    return packet;
+    int temp; packet >> temp; tipo = static_cast<PacketType>(temp); return packet;
 }
-
 inline sf::Packet& operator << (sf::Packet& packet, PacketType tipo) {
-    packet << static_cast<int>(tipo);
-    return packet;
+    packet << static_cast<int>(tipo); return packet;
 }
 
 Client* Client::instanceClient = nullptr;
 
-Client::Client() :connected(false), myPort(0),
-m_mapReceived(false),
-loginOk(false), RegisterOk(false),
-m_hasLoginResponse(false), m_hasRegisterResponse(false),
-m_isInMatchmakingQueue(false), m_matchFound(false),
-m_gameServerUdpPort(0), m_myUdpPortForGame(0),
-m_isConnectedToGameServer(false), m_amIPlayerOne(false),
-m_lastServerConfirmedMyPlayerPosition(-1.f, -1.f),
-m_newServerStateReceived(false) {
+Client::Client() :
+    connected(false), myPort(0),
+    m_mapReceived(false),
+    loginOk(false), RegisterOk(false),
+    m_hasLoginResponse(false), m_hasRegisterResponse(false),
+    m_isInMatchmakingQueue(false), m_matchFound(false),
+    m_gameServerUdpPort(0), m_myUdpPortForGame(0),
+    m_isConnectedToGameServer(false), m_amIPlayerOne(false),
+    m_lastServerConfirmedMyPlayerPosition(-1.f, -1.f),
+    m_newServerStateReceived(false),
+    m_myPlayerOnGround(false), // <--- NUEVO: Inicializar
+    m_myPlayerServerVelocity(0.f, 0.f) // <--- NUEVO: Inicializar
+{
     mapFilePath = "Data/map.txt";
-    myPlayerPosition = { -1.f, -1.f };
 }
 
 Client* Client::getInstance() {
@@ -140,7 +119,6 @@ void Client::processPacket(sf::Packet tcp_packet) {
         std::cerr << "[CLIENT] Error al extraer PacketType del paquete TCP." << std::endl;
         return;
     }
-    // std::cout << "[CLIENT DEBUG] Client::processPacket() - Procesando tipo TCP: " << static_cast<int>(packetType) << std::endl;
 
     switch (packetType) {
     case S_MAP_DATA: {
@@ -161,23 +139,22 @@ void Client::processPacket(sf::Packet tcp_packet) {
         }
         break;
     }
-                   // ¡¡¡ATENCIÓN!!! CAMBIA ESTOS VALORES EN EL ENUM LOCAL O EN EL SERVIDOR PARA QUE COINCIDAN
-    case S_LOGIN_OK: // Client espera 101, Server(Servicios) envía 6.
+    case S_LOGIN_OK:
         std::cout << "[CLIENT] Recibido S_LOGIN_OK." << std::endl;
         loginOk = true;
         m_hasLoginResponse = true;
         break;
-    case S_LOGIN_FAIL: // Client espera 102, Server(Servicios) envía 7.
+    case S_LOGIN_FAIL:
         std::cout << "[CLIENT] Recibido S_LOGIN_FAIL." << std::endl;
         loginOk = false;
         m_hasLoginResponse = true;
         break;
-    case S_REGISTER_OK: // Client espera 103, Server(Servicios) envía 8.
+    case S_REGISTER_OK:
         std::cout << "[CLIENT] Recibido S_REGISTER_OK." << std::endl;
         RegisterOk = true;
         m_hasRegisterResponse = true;
         break;
-    case S_REGISTER_FAIL: // Client espera 104, Server(Servicios) envía 9.
+    case S_REGISTER_FAIL:
         std::cout << "[CLIENT] Recibido S_REGISTER_FAIL." << std::endl;
         RegisterOk = false;
         m_hasRegisterResponse = true;
@@ -207,7 +184,7 @@ void Client::processPacket(sf::Packet tcp_packet) {
                 << ". Soy Jugador Uno: " << (m_amIPlayerOne ? "Si" : "No") << std::endl;
 
             opponentInterpolationState = OpponentInterpolationState();
-            myPlayerPosition = { -1.f, -1.f };
+            // myPlayerPosition = { -1.f, -1.f }; // Ya no es la fuente principal de verdad
 
             connectToGameServerUDP();
         }
@@ -304,25 +281,40 @@ void Client::processGamePacket(sf::Packet& udp_packet) {
     if (rawPacketType == static_cast<int>(S_GAME_STATE)) {
         float p1x, p1y, p2x, p2y;
         int p1h, p1l, p2h, p2l;
+        float p1vx, p1vy, p2vx, p2vy; // <--- NUEVO: Componentes de velocidad
+        bool p1og, p2og;             // <--- NUEVO: Flags de onGround
 
         sf::Time receptionTime = udpPacketReceiveClock.getElapsedTime();
 
-        if (udp_packet >> p1x >> p1y >> p1h >> p1l >> p2x >> p2y >> p2h >> p2l) {
+        // Esperar que el servidor envíe estos nuevos campos
+        if (udp_packet >> p1x >> p1y >> p1h >> p1l >> p1vx >> p1vy >> p1og // Estado del Jugador 1
+            >> p2x >> p2y >> p2h >> p2l >> p2vx >> p2vy >> p2og) { // Estado del Jugador 2
             sf::Vector2f serverMyPos;
             sf::Vector2f opponentPos;
 
             if (m_amIPlayerOne) {
-                serverMyPos = { p1x, p1y }; myPlayerHealth = p1h; myPlayerLives = p1l;
-                opponentPos = { p2x, p2y }; opponentPlayerHealth = p2h; opponentPlayerLives = p2l;
-            }
-            else {
-                serverMyPos = { p2x, p2y }; myPlayerHealth = p2h; myPlayerLives = p2l;
-                opponentPos = { p1x, p1y }; opponentPlayerHealth = p1h; opponentPlayerLives = p1l;
-            }
+                serverMyPos = { p1x, p1y };
+                myPlayerHealth = p1h;
+                myPlayerLives = p1l;
+                m_myPlayerServerVelocity = { p1vx, p1vy }; // <--- NUEVO: Almacenar velocidad del servidor
+                m_myPlayerOnGround = p1og;                 // <--- NUEVO: Almacenar onGround del servidor
 
-            // Log para verificar
-            // std::cout << "[Client::processGamePacket] Received server state. My server pos: ("
-            //           << serverMyPos.x << "," << serverMyPos.y << ")" << std::endl;
+                opponentPos = { p2x, p2y };
+                opponentPlayerHealth = p2h;
+                opponentPlayerLives = p2l;
+                // Si quieres interpolar velocidad/onGround del oponente, almacénalos aquí
+            }
+            else { // Soy jugador dos
+                serverMyPos = { p2x, p2y };
+                myPlayerHealth = p2h;
+                myPlayerLives = p2l;
+                m_myPlayerServerVelocity = { p2vx, p2vy }; // <--- NUEVO: Almacenar velocidad del servidor
+                m_myPlayerOnGround = p2og;                 // <--- NUEVO: Almacenar onGround del servidor
+
+                opponentPos = { p1x, p1y };
+                opponentPlayerHealth = p1h;
+                opponentPlayerLives = p1l;
+            }
 
             m_lastServerConfirmedMyPlayerPosition = serverMyPos;
             m_newServerStateReceived = true; // Indicar a Game.cpp que hay un nuevo estado
@@ -346,35 +338,11 @@ void Client::processGamePacket(sf::Packet& udp_packet) {
             }
         }
         else {
-            std::cerr << "[Client-UDP] Error deserializando S_GAME_STATE." << std::endl;
+            std::cerr << "[Client-UDP] Error deserializando S_GAME_STATE (faltan campos de velocidad/onGround?)." << std::endl;
         }
     }
     else {
         std::cerr << "[Client-UDP] Tipo de GamePacket desconocido (" << rawPacketType << ") desde GameServer." << std::endl;
-    }
-}
-
-void Client::sendPlayerInput(float moveDir, bool wantsToShoot) {
-    if (!m_isConnectedToGameServer) return;
-
-    sf::Packet inputPacket;
-    inputPacket << static_cast<int>(PacketType::C_PLAYER_INPUT) << moveDir << wantsToShoot;
-
-    std::optional<sf::IpAddress> gameServerResolvedIpOpt = sf::IpAddress::resolve(m_gameServerIp);
-    if (!gameServerResolvedIpOpt || gameServerResolvedIpOpt.value() == sf::IpAddress::Any) {
-        std::cerr << "[Client-UDP] No se pudo resolver la IP del GameServer de forma valida o es Any: " << m_gameServerIp << std::endl;
-        return;
-    }
-
-    if (gameUdpSocket.send(inputPacket, gameServerResolvedIpOpt.value(), m_gameServerUdpPort) == sf::Socket::Status::Done) {
-        // Añadir al historial (incluso si no hay re-simulación, es bueno tenerlo por si acaso o para depurar)
-        ClientInputRecord record;
-        record.moveDirection = moveDir;
-        record.wantsToShoot = wantsToShoot;
-        addSentInputToHistory(record);
-    }
-    else {
-        std::cerr << "[Client-UDP] Error enviando paquete de input." << std::endl;
     }
 }
 
@@ -386,15 +354,29 @@ void Client::addSentInputToHistory(const ClientInputRecord& input) {
     }
 }
 
-/*
-void Client::clearOldPendingInputs(unsigned int upToSequenceNumber) {
-    while (!m_pendingInputs.empty() && m_pendingInputs.front().sequenceNumber <= upToSequenceNumber) {
-        m_pendingInputs.pop_front();
-    }
-    m_lastAckedInputSequenceByServer = upToSequenceNumber;
-}
-*/
+void Client::sendPlayerInput(float moveDir, bool wantsToShoot, bool jumpRequestedThisTick) { // <--- MODIFICADO
+    if (!m_isConnectedToGameServer) return;
 
+    sf::Packet inputPacket;
+    inputPacket << static_cast<int>(PacketType::C_PLAYER_INPUT) << moveDir << wantsToShoot << jumpRequestedThisTick; // <--- MODIFICADO: Añadir jumpRequestedThisTick
+
+    std::optional<sf::IpAddress> gameServerResolvedIpOpt = sf::IpAddress::resolve(m_gameServerIp);
+    if (!gameServerResolvedIpOpt || gameServerResolvedIpOpt.value() == sf::IpAddress::Any) {
+        std::cerr << "[Client-UDP] No se pudo resolver la IP del GameServer de forma valida o es Any: " << m_gameServerIp << std::endl;
+        return;
+    }
+
+    if (gameUdpSocket.send(inputPacket, gameServerResolvedIpOpt.value(), m_gameServerUdpPort) == sf::Socket::Status::Done) {
+        ClientInputRecord record;
+        record.moveDirection = moveDir;
+        record.wantsToShoot = wantsToShoot;
+        record.jumpRequested = jumpRequestedThisTick; // <--- NUEVO: Registrar solicitud de salto
+        addSentInputToHistory(record);
+    }
+    else {
+        std::cerr << "[Client-UDP] Error enviando paquete de input." << std::endl;
+    }
+}
 
 bool Client::ReadWriteMapReceived(std::string& receivedMapContent) {
     std::ofstream mapFile(mapFilePath, std::ios::out | std::ios::trunc);
