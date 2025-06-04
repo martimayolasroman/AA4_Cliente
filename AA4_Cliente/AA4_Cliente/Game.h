@@ -44,9 +44,8 @@ const float BULLET_WIDTH = 10.0f;
 const float BULLET_HEIGHT = 5.0f;
 const float SHOOT_COOLDOWN = 0.5f;
 
-
-// --- Constantes para Interpolación ---
 const float INTERPOLATION_DELAY_SECONDS = 0.1f; // 100ms. Ajusta este valor.
+const float FIXED_DELTA_TIME = 1.0f / 60.0f; // Aproximadamente 60 ticks por segundo para la simulación de predicción/reconciliación
 
 
 class Client; // Forward declaration
@@ -58,6 +57,11 @@ public:
     void run();
 
 private:
+
+
+    void applyPlayerMovement(Player& player, float moveDir, /*bool jumpPressed,*/ float deltaTime); // Función de ayuda para la física
+    void reconcilePlayer(); // Nueva función para la lógica de reconciliación
+
     float m_currentMoveDirection; // Input actual para el jugador local
 
     sf::RenderWindow* m_window;
@@ -78,6 +82,8 @@ private:
     sf::Text* m_livesText;
     sf::Text* m_gameOverText;
     sf::Text* m_waitingText;
+
+    float m_accumulatedTimeForPrediction;
 
     bool m_gameOverState;
     sf::Clock m_gameLogicClock; // Reloj para deltaTime de la lógica local del juego

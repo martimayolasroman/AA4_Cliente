@@ -55,7 +55,9 @@ loginOk(false), RegisterOk(false),
 m_hasLoginResponse(false), m_hasRegisterResponse(false),
 m_isInMatchmakingQueue(false), m_matchFound(false),
 m_gameServerUdpPort(0), m_myUdpPortForGame(0),
-m_isConnectedToGameServer(false), m_amIPlayerOne(false) {
+m_isConnectedToGameServer(false), m_amIPlayerOne(false),
+m_lastServerConfirmedMyPlayerPosition(-1.f, -1.f),
+m_newServerStateReceived(false) {
     mapFilePath = "Data/map.txt";
     myPlayerPosition = { -1.f, -1.f };
 }
@@ -306,29 +308,30 @@ void Client::processGamePacket(sf::Packet& udp_packet) {
         sf::Time receptionTime = udpPacketReceiveClock.getElapsedTime();
 
         if (udp_packet >> p1x >> p1y >> p1h >> p1l >> p2x >> p2y >> p2h >> p2l) {
-            sf::Vector2f newMyPos, newOpponentPos;
-            int newMyHealth, newMyLives, newOpponentHealth, newOpponentLives;
+            sf::Vector2f serverMyPos;
+            sf::Vector2f opponentPos;
 
             if (m_amIPlayerOne) {
-                newMyPos = { p1x, p1y }; newMyHealth = p1h; newMyLives = p1l;
-                newOpponentPos = { p2x, p2y }; newOpponentHealth = p2h; newOpponentLives = p2l;
+                serverMyPos = { p1x, p1y }; myPlayerHealth = p1h; myPlayerLives = p1l;
+                opponentPos = { p2x, p2y }; opponentPlayerHealth = p2h; opponentPlayerLives = p2l;
             }
             else {
-                newMyPos = { p2x, p2y }; newMyHealth = p2h; newMyLives = p2l;
-                newOpponentPos = { p1x, p1y }; newOpponentHealth = p1h; newOpponentLives = p1l;
+                serverMyPos = { p2x, p2y }; myPlayerHealth = p2h; myPlayerLives = p2l;
+                opponentPos = { p1x, p1y }; opponentPlayerHealth = p1h; opponentPlayerLives = p1l;
             }
 
-            myPlayerPosition = newMyPos;
-            myPlayerHealth = newMyHealth;
-            myPlayerLives = newMyLives;
+            // Log para verificar
+            // std::cout << "[Client::processGamePacket] Received server state. My server pos: ("
+            //           << serverMyPos.x << "," << serverMyPos.y << ")" << std::endl;
 
-            opponentPlayerHealth = newOpponentHealth;
-            opponentPlayerLives = newOpponentLives;
+            m_lastServerConfirmedMyPlayerPosition = serverMyPos;
+            m_newServerStateReceived = true; // Indicar a Game.cpp que hay un nuevo estado
 
+            // Actualizar el estado del oponente para la interpolación
             if (!opponentInterpolationState.hasReceivedFirstUpdate) {
-                opponentInterpolationState.previousPosition = newOpponentPos;
+                opponentInterpolationState.previousPosition = opponentPos;
                 opponentInterpolationState.previousTimestamp = receptionTime;
-                opponentInterpolationState.currentPosition = newOpponentPos;
+                opponentInterpolationState.currentPosition = opponentPos;
                 opponentInterpolationState.currentTimestamp = receptionTime;
                 opponentInterpolationState.hasReceivedFirstUpdate = true;
             }
@@ -336,7 +339,7 @@ void Client::processGamePacket(sf::Packet& udp_packet) {
                 if (receptionTime > opponentInterpolationState.currentTimestamp) {
                     opponentInterpolationState.previousPosition = opponentInterpolationState.currentPosition;
                     opponentInterpolationState.previousTimestamp = opponentInterpolationState.currentTimestamp;
-                    opponentInterpolationState.currentPosition = newOpponentPos;
+                    opponentInterpolationState.currentPosition = opponentPos;
                     opponentInterpolationState.currentTimestamp = receptionTime;
                     opponentInterpolationState.hasReceivedEnoughUpdatesForInterpolation = true;
                 }
@@ -354,23 +357,44 @@ void Client::processGamePacket(sf::Packet& udp_packet) {
 void Client::sendPlayerInput(float moveDir, bool wantsToShoot) {
     if (!m_isConnectedToGameServer) return;
 
-    // std::cout << "[CLIENT " << clientNick << " SENDING_INPUT] moveDir: " << moveDir << ", shoot: " << wantsToShoot << std::endl;
-
     sf::Packet inputPacket;
     inputPacket << static_cast<int>(PacketType::C_PLAYER_INPUT) << moveDir << wantsToShoot;
 
     std::optional<sf::IpAddress> gameServerResolvedIpOpt = sf::IpAddress::resolve(m_gameServerIp);
-
-    if (!gameServerResolvedIpOpt ||
-        gameServerResolvedIpOpt.value() == sf::IpAddress::Any) {
+    if (!gameServerResolvedIpOpt || gameServerResolvedIpOpt.value() == sf::IpAddress::Any) {
         std::cerr << "[Client-UDP] No se pudo resolver la IP del GameServer de forma valida o es Any: " << m_gameServerIp << std::endl;
         return;
     }
 
-    if (gameUdpSocket.send(inputPacket, gameServerResolvedIpOpt.value(), m_gameServerUdpPort) != sf::Socket::Status::Done) {
+    if (gameUdpSocket.send(inputPacket, gameServerResolvedIpOpt.value(), m_gameServerUdpPort) == sf::Socket::Status::Done) {
+        // Añadir al historial (incluso si no hay re-simulación, es bueno tenerlo por si acaso o para depurar)
+        ClientInputRecord record;
+        record.moveDirection = moveDir;
+        record.wantsToShoot = wantsToShoot;
+        addSentInputToHistory(record);
+    }
+    else {
         std::cerr << "[Client-UDP] Error enviando paquete de input." << std::endl;
     }
 }
+
+void Client::addSentInputToHistory(const ClientInputRecord& input) {
+    m_pendingInputs.push_back(input);
+    const size_t MAX_PENDING_INPUTS = 200; // Límite para evitar crecimiento indefinido
+    if (m_pendingInputs.size() > MAX_PENDING_INPUTS) {
+        m_pendingInputs.pop_front();
+    }
+}
+
+/*
+void Client::clearOldPendingInputs(unsigned int upToSequenceNumber) {
+    while (!m_pendingInputs.empty() && m_pendingInputs.front().sequenceNumber <= upToSequenceNumber) {
+        m_pendingInputs.pop_front();
+    }
+    m_lastAckedInputSequenceByServer = upToSequenceNumber;
+}
+*/
+
 
 bool Client::ReadWriteMapReceived(std::string& receivedMapContent) {
     std::ofstream mapFile(mapFilePath, std::ios::out | std::ios::trunc);
