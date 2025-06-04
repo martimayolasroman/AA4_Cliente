@@ -67,6 +67,8 @@ private:
     sf::RenderWindow* m_window;
     Client* m_client;
 
+
+    sf::Texture m_playerTexture; // Textura para el jugador
     Player m_player;
     Player m_opponentPlayer; // Se usará para dibujar al oponente interpolado
     bool m_gameHasStarted = false;
@@ -91,4 +93,5 @@ private:
 
     void centerTextOrigin(sf::Text& text);
     std::vector<sf::RectangleShape> loadMap(const std::string& filename);
+    bool loadGameAssets();
 };

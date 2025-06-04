@@ -8,7 +8,7 @@
 // serán accedidas desde Player.cpp, que incluirá Game.h
 
 struct Player {
-    sf::RectangleShape shape;
+    std::optional<sf::Sprite> sprite; // Reemplaza sf::RectangleShape shape
     sf::Vector2f velocity;
     int health;
     int lives;
@@ -18,6 +18,8 @@ struct Player {
 
     Player(); // Declaración del constructor
     void takeDamage();
+    void setTexture(const sf::Texture& texture); // Para asignar la textura desde Game
+
 };
 
 #endif // PLAYER_H

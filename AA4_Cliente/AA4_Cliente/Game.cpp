@@ -38,6 +38,25 @@ std::vector<sf::RectangleShape> Game::loadMap(const std::string& filename) {
     return platforms_map;
 }
 
+bool Game::loadGameAssets()
+{
+    std::string playerTexturePath = "Assets/Sprites/player_sprite.png"; // ¡CAMBIA ESTA RUTA!
+    if (!m_playerTexture.loadFromFile(playerTexturePath)) {
+        std::cerr << "[Game] ERROR: No se pudo cargar la textura del jugador desde: " << playerTexturePath << std::endl;
+        return false;
+    }
+    m_playerTexture.setSmooth(true); // Opcional, para mejor apariencia al escalar
+
+    // Si el oponente usa la misma textura:
+    m_player.setTexture(m_playerTexture);
+    m_opponentPlayer.setTexture(m_playerTexture); // Ambos usan la misma textura
+
+    
+    m_opponentPlayer.sprite->setColor(sf::Color(150, 255, 150, 220)); // Un tinte verdoso
+
+    return true;
+}
+
 void Game::centerTextOrigin(sf::Text& text) {
     if (!m_fontLoaded) return;
     sf::FloatRect text_bounds = text.getLocalBounds();
@@ -64,6 +83,12 @@ Game::Game(sf::RenderWindow* window, Client* client_instance)
         std::cerr << "CRITICAL: Game_constructor - Client instance is null!" << std::endl;
         return;
     }
+
+    if (!loadGameAssets()) {
+        std::cerr << "[Game] Error al cargar assets. El juego puede no verse correctamente." << std::endl;
+        // Puedes decidir cerrar el juego o continuar con sprites vacíos/fallback.
+    }
+
 
     m_platforms = loadMap(m_client->mapFilePath);
 
@@ -101,8 +126,7 @@ Game::Game(sf::RenderWindow* window, Client* client_instance)
         std::cerr << "[Game] Error: No se pudo cargar la fuente: " << m_gameFontPath << ". Los textos no se mostrarán." << std::endl;
     }
 
-    m_opponentPlayer.shape.setFillColor(COLOR_OPPONENT_GREEN);
-    m_player.shape.setFillColor(COLOR_PLAYER_BLUE);
+    
 }
 
 Game::~Game() {
@@ -167,7 +191,7 @@ void Game::run() {
                 m_gameHasStarted = true;
                 m_interpolationRenderClock.restart();
                 if (m_waitingText && m_fontLoaded) m_waitingText->setString("Partida Encontrada!");
-                m_player.shape.setPosition(m_client->getLastServerConfirmedMyPlayerPosition());
+                m_player.sprite->setPosition(m_client->getLastServerConfirmedMyPlayerPosition());
             }
             if (m_gameHasStarted) {
                 m_player.health = m_client->getMyPlayerHealth();
@@ -229,17 +253,17 @@ void Game::run() {
                     sf::Vector2f interpolatedPosition;
                     interpolatedPosition.x = oppState.previousPosition.x + (oppState.currentPosition.x - oppState.previousPosition.x) * interpolationFactor;
                     interpolatedPosition.y = oppState.previousPosition.y + (oppState.currentPosition.y - oppState.previousPosition.y) * interpolationFactor;
-                    m_opponentPlayer.shape.setPosition(interpolatedPosition);
+                    m_opponentPlayer.sprite->setPosition(interpolatedPosition);
                 }
                 else if (renderTimeTarget > currTimestamp.asSeconds()) {
-                    m_opponentPlayer.shape.setPosition(oppState.currentPosition);
+                    m_opponentPlayer.sprite->setPosition(oppState.currentPosition);
                 }
                 else {
-                    m_opponentPlayer.shape.setPosition(oppState.hasReceivedFirstUpdate ? oppState.currentPosition : oppState.previousPosition);
+                    m_opponentPlayer.sprite->setPosition(oppState.hasReceivedFirstUpdate ? oppState.currentPosition : oppState.previousPosition);
                 }
             }
             else if (oppState.hasReceivedFirstUpdate) {
-                m_opponentPlayer.shape.setPosition(oppState.currentPosition);
+                m_opponentPlayer.sprite->setPosition(oppState.currentPosition);
             }
         }
 
@@ -250,9 +274,9 @@ void Game::run() {
         // for (const auto& bullet : m_bullets) { m_window->draw(bullet.shape); }
 
         if (m_gameHasStarted) {
-            m_window->draw(m_player.shape);
+            if (m_player.sprite) m_window->draw(*m_player.sprite);
             if (m_client->getOpponentInterpolationState().hasReceivedFirstUpdate) {
-                m_window->draw(m_opponentPlayer.shape);
+                if (m_opponentPlayer.sprite) m_window->draw(*m_opponentPlayer.sprite);
             }
             if (m_fontLoaded) {
                 if (m_healthText) { /* ... */ m_healthText->setString("Health: " + std::to_string(m_player.health)); m_window->draw(*m_healthText); }
@@ -287,45 +311,45 @@ void Game::applyPlayerMovement(Player& player, float moveDirInput, float deltaTi
     if (!player.onGround) {
         player.velocity.y += GRAVITY * deltaTime;
     }
-    player.shape.move({ player.velocity.x * deltaTime, 0.f });
-    sf::FloatRect playerBounds = player.shape.getGlobalBounds();
+    player.sprite->move({ player.velocity.x * deltaTime, 0.f });
+    sf::FloatRect playerBounds = player.sprite->getGlobalBounds();
 
     for (const auto& platform : m_platforms) {
         std::optional<sf::FloatRect> intersection = playerBounds.findIntersection(platform.getGlobalBounds());
         if (intersection) {
             if (player.velocity.x > 0) {
-                player.shape.setPosition({ intersection->position.x - playerBounds.size.x, playerBounds.position.y });
+                player.sprite->setPosition({ intersection->position.x - playerBounds.size.x, playerBounds.position.y });
             }
             else if (player.velocity.x < 0) {
-                player.shape.setPosition({ intersection->position.x + intersection->size.x, playerBounds.position.y });
+                player.sprite->setPosition({ intersection->position.x + intersection->size.x, playerBounds.position.y });
             }
             player.velocity.x = 0;
-            playerBounds = player.shape.getGlobalBounds();
+            playerBounds = player.sprite->getGlobalBounds();
             break;
         }
     }
 
-    player.shape.move({ 0.f, player.velocity.y * deltaTime });
+    player.sprite->move({ 0.f, player.velocity.y * deltaTime });
     player.onGround = false;
-    playerBounds = player.shape.getGlobalBounds();
+    playerBounds = player.sprite->getGlobalBounds();
 
     for (const auto& platform : m_platforms) {
         std::optional<sf::FloatRect> intersection = playerBounds.findIntersection(platform.getGlobalBounds());
         if (intersection) {
             if (player.velocity.y > 0) {
-                player.shape.setPosition({ playerBounds.position.x, intersection->position.y - playerBounds.size.y });
+                player.sprite->setPosition({ playerBounds.position.x, intersection->position.y - playerBounds.size.y });
                 player.onGround = true; player.velocity.y = 0;
             }
             else if (player.velocity.y < 0) {
-                player.shape.setPosition({ playerBounds.position.x, intersection->position.y + intersection->size.y });
+                player.sprite->setPosition({ playerBounds.position.x, intersection->position.y + intersection->size.y });
                 player.velocity.y = 0;
             }
-            playerBounds = player.shape.getGlobalBounds();
+            playerBounds = player.sprite->getGlobalBounds();
             break;
         }
     }
-    if (player.shape.getPosition().x < 0.f) { player.shape.setPosition({ 0.f, player.shape.getPosition().y }); }
-    if (player.shape.getPosition().x + playerBounds.size.x > WINDOW_WIDTH) { player.shape.setPosition({ WINDOW_WIDTH - playerBounds.size.x, player.shape.getPosition().y }); }
+    if (player.sprite->getPosition().x < 0.f) { player.sprite->setPosition({ 0.f, player.sprite->getPosition().y }); }
+    if (player.sprite->getPosition().x + playerBounds.size.x > WINDOW_WIDTH) { player.sprite->setPosition({ WINDOW_WIDTH - playerBounds.size.x, player.sprite->getPosition().y }); }
 }
 
 // RECONCILIACIÓN SIMPLE: AJUSTAR POSICIÓN SIN RE-SIMULACIÓN DE INPUTS
@@ -335,7 +359,7 @@ void Game::reconcilePlayer() {
     }
 
     sf::Vector2f serverPosition = m_client->getLastServerConfirmedMyPlayerPosition();
-    sf::Vector2f currentPredictedPos = m_player.shape.getPosition();
+    sf::Vector2f currentPredictedPos = m_player.sprite->getPosition();
     m_client->consumeServerStateFlag(); // Marcar el estado del servidor como procesado
 
     float diffX = currentPredictedPos.x - serverPosition.x;
@@ -347,14 +371,14 @@ void Game::reconcilePlayer() {
     if (distance > RECONCILIATION_THRESHOLD) {
         std::cout << "[Game RECONCILE - SIMPLE] DISCREPANCY! Snapping player to server position. Distance: " << distance << std::endl;
         std::cout << "  Server position to set: (" << serverPosition.x << "," << serverPosition.y << ")" << std::endl;
-        std::cout << "  Player position BEFORE snap: (" << m_player.shape.getPosition().x << "," << m_player.shape.getPosition().y << ")" << std::endl;
+        std::cout << "  Player position BEFORE snap: (" << m_player.sprite->getPosition().x << "," << m_player.sprite->getPosition().y << ")" << std::endl;
 
-        m_player.shape.setPosition(serverPosition);
+        m_player.sprite->setPosition(serverPosition);
 
         // Opcional: Resetear velocidad si la discrepancia es muy grande y no quieres que la predicción continúe con una velocidad "incorrecta"
         // m_player.velocity = {0.f, 0.f}; // O la velocidad que el servidor pudiera enviar.
 
-        std::cout << "  Player position AFTER snap: (" << m_player.shape.getPosition().x << "," << m_player.shape.getPosition().y << ")" << std::endl;
+        std::cout << "  Player position AFTER snap: (" << m_player.sprite->getPosition().x << "," << m_player.sprite->getPosition().y << ")" << std::endl;
     }
     // No hay re-simulación de inputs pendientes aquí. La predicción normal en Game::run tomará el relevo.
 }
