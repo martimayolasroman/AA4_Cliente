@@ -8,6 +8,7 @@
 #include <optional>
 #include <SFML/System/Time.hpp>
 #include <deque> // Para m_pendingInputs
+#include <SFML/Audio.hpp> // Para sonido
 
 #define WIDTH 1280
 #define HEIGHT 720
@@ -91,6 +92,12 @@ private:
     bool sendPacket(sf::Packet& packet);
     void processPacket(sf::Packet tcp_packet);
 
+ 
+    bool m_soundLoaded = false;
+    void loadSounds();
+    //sf::SoundBuffer m_tauntSoundBuffer;
+   // std::optional<sf::Sound> m_tauntSound;
+
     sf::TcpSocket Clientsocket;
     bool connected;
     const sf::IpAddress SERVER_IP = sf::IpAddress(127, 0, 0, 1);
@@ -129,8 +136,8 @@ public:
     sf::Vector2f getLastServerConfirmedMyPlayerPosition() const { return m_lastServerConfirmedMyPlayerPosition; }
     bool hasNewServerState() const { return m_newServerStateReceived; }
     void consumeServerStateFlag() { m_newServerStateReceived = false; }
-    bool getMyPlayerOnGround() const { return m_myPlayerOnGround; }          // <--- NUEVO
-    sf::Vector2f getMyPlayerServerVelocity() const { return m_myPlayerServerVelocity; } // <--- NUEVO
+    bool getMyPlayerOnGround() const { return m_myPlayerOnGround; }         
+    sf::Vector2f getMyPlayerServerVelocity() const { return m_myPlayerServerVelocity; } 
 
     // Para el oponente (usado por Game.cpp para interpolar)
     const OpponentInterpolationState& getOpponentInterpolationState() const { return opponentInterpolationState; }
@@ -140,6 +147,9 @@ public:
 
     bool isConnectedToGameServer() const { return m_isConnectedToGameServer; }
     void receiveAndProcessGameData();
-    void sendPlayerInput(float moveDir, bool wantsToShoot, bool jumpRequestedThisTick); // <--- MODIFICADO
+    void sendPlayerInput(float moveDir, bool wantsToShoot, bool jumpRequestedThisTick); 
     void addSentInputToHistory(const ClientInputRecord& input);
+
+   // void sendPlayerTaunt(); // enviar la notificación de burla
+   // void playTauntSound();  //  función para reproducir el sonido localmente
 };

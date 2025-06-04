@@ -33,6 +33,8 @@ int main() {
     GameState currentState = GameState::LOGIN; // Estado inicial
 
     Client* clientInstance = Client::getInstance();
+
+    
     if (!clientInstance) { // Buena práctica verificar si getInstance devolvió null (aunque no debería si es un singleton bien hecho)
         std::cerr << "Error crítico: No se pudo obtener la instancia del Cliente." << std::endl;
         delete window;
