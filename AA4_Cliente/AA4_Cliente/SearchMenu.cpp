@@ -1,138 +1,202 @@
 #include "SearchMenu.h"
+#include "Client.h"
+#include <iostream>
 
-SearchGameMenu::SearchGameMenu(sf::RenderWindow* w)
-{
-    window = w;
+// Función auxiliar para centrar el origen del texto
+void SearchGameMenu::centerTextOrigin(sf::Text& text) {
+    // Solo centrar si la fuente del texto está disponible (implica que el texto se creó)
+    //if (!text.getFont()) return;
+
+    sf::FloatRect text_bounds = text.getLocalBounds();
+    // Para sf::Text, getLocalBounds() usualmente tiene left y top en 0
+    // por lo que el origen se calcula directamente con width/2 y height/2
+    text.setOrigin({ text_bounds.size.x / 2.f, text_bounds.size.y / 2.f });
+}
+
+SearchGameMenu::SearchGameMenu(sf::RenderWindow* w) :
+    window(w),
+    casualMatchmakingButton(nullptr),
+    titleText(nullptr),
+    m_statusDisplay(nullptr),
+    fontLoadedSuccessfully(false), // Inicializar a false
+    m_requestedMatchmaking(false) {
+
     if (!window) {
         std::cerr << "Error: Ventana no proporcionada a SearchGameMenu." << std::endl;
-        // Considerar lanzar una excepción o manejar el error de otra forma
         return;
     }
 
     width = window->getSize().x;
     height = window->getSize().y;
 
-    if (!font.openFromFile(fontsPath + fontName))
-    {
+    // Cargar la fuente y verificar el éxito
+    if (font.openFromFile(fontsPath + fontName)) { // Usas openFromFile
+        fontLoadedSuccessfully = true;
+        std::cout << "[SearchGameMenu] Fuente '" << fontName << "' cargada correctamente." << std::endl;
+    }
+    else {
+        fontLoadedSuccessfully = false;
         std::cerr << "Error al cargar la fuente: " << fontsPath + fontName << std::endl;
     }
 
-    title = new sf::Text(font, titleString, titleTextSize);
+    // Solo crear elementos dependientes de la fuente si esta se cargó
+    if (fontLoadedSuccessfully) {
+        titleText = new sf::Text(font, titleString, titleTextSize);
+        titleText->setFillColor(titleTextColor);
+        centerTextOrigin(*titleText);
+        titleText->setPosition({ static_cast<float>(width) / 2.f, titleYPos });
 
-    //Set positions
-    float centerX = width / 2.0f;
+        m_statusDisplay = new sf::Text(font, "Pulsa 'Buscar Partida Amistosa'", 24);
+        m_statusDisplay->setFillColor(sf::Color::Black);
+        centerTextOrigin(*m_statusDisplay);
+        m_statusDisplay->setPosition({ static_cast<float>(width) / 2.f, titleYPos + 80.f });
 
-    titlePosition = sf::Vector2f(centerX - (title->getGlobalBounds().size.x / 2.0f), static_cast<float>(titleYPos));
-    title->setFillColor(buttonColor); // Usando el mismo color que los botones del login original
-    title->setPosition(titlePosition);
-
-    // Casual Matchmaking Button (centrado)
-    casualMatchmakingButtonPosition = sf::Vector2f(centerX - (buttonSize.x / 2.0f), static_cast<float>(buttonYPos));
-    casualMatchmakingButton = new Button(buttonSize, casualMatchmakingButtonPosition, casualMatchmakingButtonText, font, buttonColor, buttonTextColor);
-
-    // No hay campos de input que inicializar
+        sf::Vector2f button_pos = {
+            static_cast<float>(width) / 2.f - buttonSize.x / 2.f,
+            buttonYPos
+        };
+        // Asumo que Button internamente también verifica la fuente o la maneja.
+        // Si Button puede fallar por la fuente, necesitarías pasar fontLoadedSuccessfully
+        // o el Button tomaría el sf::Font& y manejaría internamente.
+        // Por ahora, asumo que Button se crea.
+        casualMatchmakingButton = new Button(buttonSize, button_pos, casualMatchmakingButtonText, font, buttonColor, buttonTextColor);
+    }
+    else {
+        std::cerr << "SearchGameMenu: La fuente no se cargo, no se crearan elementos de texto/boton dependientes." << std::endl;
+    }
 }
 
-SearchGameMenu::~SearchGameMenu()
-{
-    delete title;
+SearchGameMenu::~SearchGameMenu() {
+    delete titleText;
     delete casualMatchmakingButton;
+    delete m_statusDisplay;
 }
 
-GameState SearchGameMenu::Update()
-{
-    if (!window) return GameState::EXIT; // Salir si la ventana no es válida
+GameState SearchGameMenu::Update() {
+    if (!window || !Client::getInstance()) {
+        std::cerr << "SearchGameMenu::Update - Ventana o instancia de cliente nula." << std::endl;
+        return GameState::EXIT;
+    }
 
-    while (window->isOpen()) {
-        // Si Client::getInstance()->run() es necesario para procesar paquetes generales, mantenlo.
-        // Si solo era para respuestas de login/registro, podría no ser necesario aquí.
-        // Por fidelidad al original Login.cpp, lo mantendré si Client existe.
-        if (Client::getInstance()) { // Comprobar si Client existe para evitar crash si no está inicializado
-            Client::getInstance()->run();
+    Client* client = Client::getInstance();
+
+       // Client::getInstance()->run(); // Procesar paquetes TCP
+
+        if (client->hasMatchBeenFound()) {
+            std::cout << "[SearchMenu] Partida encontrada por el cliente! Cambiando a GameState::GAME." << std::endl;
+            m_requestedMatchmaking = false;
+            return GameState::GAME;
         }
 
-
-        // No hay respuestas de login/registro que comprobar aquí.
+        if (fontLoadedSuccessfully && m_statusDisplay) { // Solo actualizar si la fuente y el texto existen
+            std::string current_status_text;
+            if (m_requestedMatchmaking && !client->isInMatchmakingQueue_flag_getter()) {
+                current_status_text = "Conectando a la cola...";
+            }
+            else if (client->isInMatchmakingQueue_flag_getter()) {
+                current_status_text = "En cola, buscando oponente...";
+            }
+            else {
+                current_status_text = "Pulsa 'Buscar Partida Amistosa'";
+            }
+            m_statusDisplay->setString(current_status_text);
+            centerTextOrigin(*m_statusDisplay);
+            m_statusDisplay->setPosition({ static_cast<float>(width) / 2.f, titleYPos + 80.f });
+        }
 
         std::optional<sf::Event> eventOpt;
         while ((eventOpt = window->pollEvent())) {
             if (eventOpt) {
                 GameState state = EventHandler(*eventOpt);
-                // Asumo que GameState::LOGIN se usaba como "permanecer en este estado".
-                // Deberías tener un GameState::SEARCH_GAME o similar.
-                // Por ahora, si EventHandler devuelve algo distinto a un estado "actual", se retorna.
-                // Necesitarás ajustar esto según tu enum GameState.
-                // Por ejemplo, si tu GameState::LOGIN era el estado "actual" para Login,
-                // aquí debería ser GameState::SEARCH_GAME (si existe)
-                if (state != GameState::SEARCH) { // CAMBIAR GameState::LOGIN al estado correspondiente a SearchGameMenu
+                if (state != GameState::SEARCH) {
+                    m_requestedMatchmaking = false;
                     return state;
                 }
             }
         }
-        Render(window); // Dibujar la UI en cada frame del bucle interno de Update
-    }
-    return GameState::EXIT; // Si la ventana se cierra
+        Render(window);
+    
+    //m_requestedMatchmaking = false;
+    return GameState::SEARCH;
 }
 
-void SearchGameMenu::Render(sf::RenderWindow* windowToRenderOn)
-{
+void SearchGameMenu::Render(sf::RenderWindow* windowToRenderOn) {
     if (!windowToRenderOn) return;
 
     windowToRenderOn->clear(backgroundColor);
 
-    if (title)
-        windowToRenderOn->draw(*title);
-    if (casualMatchmakingButton)
-        casualMatchmakingButton->draw(*windowToRenderOn);
+    // Solo dibujar si la fuente se cargó y los elementos existen
+    if (fontLoadedSuccessfully) {
+        if (titleText) windowToRenderOn->draw(*titleText);
+        if (m_statusDisplay) windowToRenderOn->draw(*m_statusDisplay);
+        if (casualMatchmakingButton) casualMatchmakingButton->draw(*window);
+    }
+    else {
+        // Opcional: dibujar un mensaje de error si la fuente no cargó
+        // sf::Text errorFontText; (crear uno con una fuente por defecto si es posible, o sin fuente)
+        // errorFontText.setString("Error: No se pudo cargar la fuente.");
+        // errorFontText.setPosition({10,10});
+        // errorFontText.setFillColor(sf::Color::Red);
+        // windowToRenderOn->draw(errorFontText);
+    }
 
     windowToRenderOn->display();
 }
 
-void SearchGameMenu::setWindow(sf::RenderWindow* win)
-{
+void SearchGameMenu::setWindow(sf::RenderWindow* win) {
     this->window = win;
     if (this->window) {
         width = this->window->getSize().x;
         height = this->window->getSize().y;
-        // Re-calcular posiciones si es necesario, aunque generalmente se hace en el constructor.
+
+        if (fontLoadedSuccessfully) { // Solo reposicionar si la fuente cargó
+            if (titleText) {
+                centerTextOrigin(*titleText);
+                titleText->setPosition({ static_cast<float>(width) / 2.f, titleYPos });
+            }
+            if (m_statusDisplay) {
+                centerTextOrigin(*m_statusDisplay);
+                m_statusDisplay->setPosition({ static_cast<float>(width) / 2.f, titleYPos + 80.f });
+            }
+            if (casualMatchmakingButton) {
+                sf::Vector2f button_pos = {
+                    static_cast<float>(width) / 2.f - buttonSize.x / 2.f,
+                    buttonYPos
+                };
+                casualMatchmakingButton->setPosition(button_pos);
+            }
+        }
     }
 }
 
-GameState SearchGameMenu::onCasualMatchmakingPressed()
-{
+GameState SearchGameMenu::onCasualMatchmakingPressed() {
+    if (!Client::getInstance()) return GameState::SEARCH;
+
     if (Client::getInstance()->requestMatchmakingFriendly()) {
-        return GameState::GAME;
+        std::cout << "[SearchMenu] Solicitud de matchmaking enviada." << std::endl;
+        m_requestedMatchmaking = true;
     }
-
-    std::cout << "Error al Buscar Partida." << std::endl;
-    return GameState::GAME; // TODO Quitar esto 
-
-
-    // Aquí iría la lógica para iniciar la búsqueda de partida,
-    // como enviar un mensaje al servidor a través de Client::getInstance()
-    // Client::getInstance()->sendSearchCasualMatchmakingRequest(); // Ejemplo
+    else {
+        std::cout << "[SearchMenu] Error al enviar solicitud de matchmaking." << std::endl;
+        m_requestedMatchmaking = false;
+        if (fontLoadedSuccessfully && m_statusDisplay) { // Solo actualizar si la fuente y el texto existen
+            m_statusDisplay->setString("Error al buscar partida. Intenta de nuevo.");
+            centerTextOrigin(*m_statusDisplay);
+            m_statusDisplay->setPosition({ static_cast<float>(width) / 2.f, titleYPos + 80.f });
+        }
+    }
+    return GameState::SEARCH;
 }
 
-GameState SearchGameMenu::EventHandler(const sf::Event& event)
-{
+GameState SearchGameMenu::EventHandler(const sf::Event& event) {
     if (event.is<sf::Event::Closed>()) {
         if (window) window->close();
-        return GameState::EXIT; // O el GameState que signifique cerrar la aplicación
+        return GameState::EXIT;
     }
 
-    if (casualMatchmakingButton && casualMatchmakingButton->handleEvent(event, *window)) {
-        // El botón fue presionado
+    // Solo manejar evento de botón si la fuente cargó y el botón existe
+    if (fontLoadedSuccessfully && casualMatchmakingButton && casualMatchmakingButton->handleEvent(event, *window)) {
         return onCasualMatchmakingPressed();
-        // Decidir qué GameState devolver. Podría ser el mismo para permanecer,
-        // o uno nuevo si la acción del botón implica un cambio inmediato de estado
-        // que no dependa de una respuesta del servidor.
-        // Por ahora, asumimos que permanece en este menú.
     }
-
-    // No hay manejo de input de texto ni foco de campos.
-
-    // Devuelve el estado actual para indicar que se debe permanecer en este menú.
-    // Deberías reemplazar GameState::LOGIN con el GameState correspondiente a este menú,
-    // por ejemplo, GameState::SEARCH_GAME.
-    return GameState::SEARCH; // CAMBIAR a GameState::SEARCH_GAME o el que corresponda
+    return GameState::SEARCH;
 }

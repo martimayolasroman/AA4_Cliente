@@ -1,5 +1,5 @@
+#include "Bullet.h" // Incluye Bullet.h transitivamente y las constantes necesarias
 #include "Game.h" // Incluye Bullet.h transitivamente y las constantes necesarias
-
 // Definición del constructor de Bullet
 // Las constantes (BULLET_WIDTH, PLAYER_WIDTH, etc.) vienen de Game.h
 Bullet::Bullet(sf::Vector2f pos, bool facingRight) {

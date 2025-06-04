@@ -1,59 +1,48 @@
 #pragma once
 
-#include "Button.h" // Asumo que Button.h sigue siendo necesario y está disponible
-#include <iostream>
-#include "GameState.h" // Asumo que GameState.h sigue siendo necesario y está disponible
-#include "Client.h"    // Asumo que Client.h sigue siendo necesario y está disponible
+#include <SFML/Graphics.hpp>
+#include "Button.h"
+#include "GameState.h"
+#include <string>
+#include <optional>
 
-class SearchGameMenu
-{
+class SearchGameMenu {
 private:
-    unsigned int width, height;
+    unsigned int width = 0, height = 0;
     sf::RenderWindow* window;
-    Button* casualMatchmakingButton; // Cambiado de loginButton/registerButton
+    Button* casualMatchmakingButton;
+    sf::Text* titleText;
+    sf::Text* m_statusDisplay;
 
-    int buttonTextSize = 24;
+    std::string titleString = "Buscar Partida";
+    int titleTextSize = 50;
+    float titleYPos = 150.f;
 
-    std::string casualMatchmakingButtonText = "Casual Matchmaking"; // Nuevo texto del botón
-    sf::Vector2f casualMatchmakingButtonPosition; // Nueva posición del botón
+    std::string casualMatchmakingButtonText = "Buscar Partida Amistosa";
+    float buttonYPos = 300.f;
+    sf::Vector2f buttonSize = { 350.f, 60.f };
 
-    sf::Color backgroundColor = sf::Color::White;
-    sf::Color buttonColor = sf::Color(255, 165, 0); // Puedes ajustar si quieres
-    sf::Color buttonTextColor = sf::Color::White;   // Puedes ajustar si quieres
+    sf::Color backgroundColor = sf::Color(230, 230, 230);
+    sf::Color buttonColor = sf::Color(70, 130, 180);
+    sf::Color buttonTextColor = sf::Color::White;
+    sf::Color titleTextColor = sf::Color(50, 50, 50);
 
-    sf::Font font;
-    sf::Text* title;
-    std::string titleString = "SEARCH GAME"; // Nuevo título
-    sf::Vector2f titlePosition;
-    int titleYPos = 70;
-    int titleTextSize = 100; // Puedes ajustar el tamaño del título si es necesario
+    sf::Font font; // Se carga en el constructor
+    bool fontLoadedSuccessfully = false; // Flag para saber si la fuente cargó
+    std::string fontsPath = "Assets/Fonts/";
+    std::string fontName = "Straw Milky.otf";
 
-    std::string fontsPath = "Assets/Fonts/"; // Mantengo la ruta de las fuentes
-    std::string fontName = "Straw Milky.otf";  // Mantengo el nombre de la fuente
+    bool m_requestedMatchmaking = false;
 
-    int buttonYPos = 300; // Ajusta la posición Y del botón como necesites
-    // int buttonSeparation = 300; // No necesario ya que solo hay un botón
-    sf::Vector2f buttonSize = sf::Vector2f(300, 60); // Ajusta el tamaño del botón como necesites
-
-
-    // Los campos de input de Login no son necesarios aquí
-    // enum InputFieldFocussed { NAME, PASSWORD, COUNT }; // No necesario
-    // ... (resto de variables de input eliminadas)
-    // InputFieldFocussed focus; // No necesario
-
-
-    // Función que se llamará al pulsar el botón
+    GameState EventHandler(const sf::Event& event);
     GameState onCasualMatchmakingPressed();
 
-    // GameState EventHandler(const sf::Event& event); // Cambiado el tipo de retorno si es necesario, o mantenido si GameState se usa de forma genérica
-    GameState EventHandler(const sf::Event& event);
-
+    void centerTextOrigin(sf::Text& text);
 
 public:
     SearchGameMenu(sf::RenderWindow* w);
-    ~SearchGameMenu(); // Añadido destructor para limpiar memoria
-    GameState Update(); // El estado que devuelve podría ser SEARCH_GAME o similar
-    void Render(sf::RenderWindow* window);
-
+    ~SearchGameMenu();
+    GameState Update();
+    void Render(sf::RenderWindow* windowToRenderOn);
     void setWindow(sf::RenderWindow* win);
 };

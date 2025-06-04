@@ -147,24 +147,25 @@ GameState Login::EventHandler(const sf::Event& event)
 		window->close();
 	}
 	if (loginButton && loginButton->handleEvent(event, *window)) {
-		if (!Client::getInstance()->hasReceivedMap()) {
-			std::cout << "[LoginUI] Esperando recepción del mapa..." << std::endl;
-			
-			return GameState::LOGIN; // No hacer nada si el mapa no ha llegado
-		}
-		std::cout << "[LoginUI] Botón Login presionado." << std::endl;
-		Client::getInstance()->loginAction(nameInput, passwordInput); // nameInput es std::string
-		// NO se cambia de estado aquí. Update() lo hará cuando llegue la respuesta.
+		// QUITAR:
+		// if (!Client::getInstance()->hasReceivedMap()) {
+		//     std::cout << "[LoginUI] Esperando recepcion del mapa..." << std::endl;
+		//     return GameState::LOGIN;
+		// }
+
+		std::cout << "[LoginUI] Boton Login presionado." << std::endl;
+		Client::getInstance()->loginAction(nameInput, passwordInput);
+		// La transición a SEARCH ocurrirá en Update() cuando loginOk sea true
 		
 	}
 
 	if (registerButton && registerButton->handleEvent(event, *window)) {
-		if (!Client::getInstance()->hasReceivedMap()) {
-			std::cout << "[LoginUI] Esperando recepción del mapa..." << std::endl;
-			
-			return GameState::LOGIN;
-		}
-		std::cout << "[LoginUI] Botón Register presionado." << std::endl;
+		// QUITAR:
+		// if (!Client::getInstance()->hasReceivedMap()) {
+		//     std::cout << "[LoginUI] Esperando recepcion del mapa..." << std::endl;
+		//     return GameState::LOGIN;
+		// }
+		std::cout << "[LoginUI] Boton Register presionado." << std::endl;
 		Client::getInstance()->RegisterAction(nameInput, passwordInput);
 		
 	}
