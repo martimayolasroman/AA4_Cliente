@@ -398,7 +398,7 @@ void Game::run() {
             m_gameOverState = true;
         }
 
-        // INTERPOLACIÓN DEL OPONENTE 
+        // INTERPOLACIÓN DEL OPONENTE ayuda ia
         if (m_gameHasStarted && m_client->isConnectedToGameServer() && !m_gameOverState) {
             const OpponentInterpolationState& oppState = m_client->getOpponentInterpolationState();
             m_opponentPlayer.health = m_client->getOpponentPlayerHealth(); 
