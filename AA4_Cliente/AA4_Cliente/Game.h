@@ -128,6 +128,11 @@ private:
 
     float m_accumulatedTimeForPrediction;
 
+    // Teleport debug
+    sf::Vector2f m_teleportTestPosition = { 50.f, 50.f }; // Posición a la que teleportarse
+    bool m_clientSideTeleported = false; // Para saber si el TP local se activó
+    // ...
+
     void centerTextOrigin(sf::Text& text);
     std::vector<sf::RectangleShape> loadMap(const std::string& filename);
 

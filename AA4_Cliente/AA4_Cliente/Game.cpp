@@ -327,6 +327,23 @@ void Game::run() {
                             m_shootRequestedThisFrame = true; // Activa la solicitud para este "tick" de juego.
                         }
                     }
+                    if (keyPressed->code == sf::Keyboard::Key::T) {
+                        std::cout << "[Game - DEBUG] Tecla T presionada. Teleportando localmente a ("
+                            << m_teleportTestPosition.x << ", " << m_teleportTestPosition.y << ")" << std::endl;
+
+                        // Mueve el sprite del jugador local directamente
+                        // Si tienes una clase Player local para predicción, actualiza su posición
+                        m_player.sprite->setPosition(m_teleportTestPosition);
+                        // Si m_player es tu representación local para predicción:
+                        // m_player.position = m_teleportTestPosition;
+                        // m_player.velocity = {0.f, 0.f}; // Detenerlo si se teleporta
+
+                        m_clientSideTeleported = true;
+                        // NO enviamos este cambio al servidor como un input normal.
+                    }
+
+
+
                 }
                 if (const auto* keyReleased = event.getIf<sf::Event::KeyReleased>()) {
                     // Si se suelta la tecla de movimiento y esa era la que estábamos usando, paramos el movimiento.
