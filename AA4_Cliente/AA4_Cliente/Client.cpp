@@ -266,6 +266,17 @@ void Client::connectToGameServerUDP() {
         << ". Listo para comunicarse con GameServer en "
         << m_gameServerIp << ":" << m_gameServerUdpPort << std::endl;
 
+    // Si la conexión UDP se estableció (o al menos el bind tuvo éxito)
+        // y queremos desconectar del servidor de servicios:
+    if (m_isConnectedToGameServer && connected) { // 'connected' es el flag de la conexión TCP
+        std::cout << "[CLIENT] Desconectando del servidor de servicios (TCP)..." << std::endl;
+        Clientsocket.disconnect();
+        connected = false; // Actualizar el flag de estado de la conexión TCP
+       
+    }
+ 
+
+
     udpPacketReceiveClock.restart(); // Reinicia el reloj para los paquetes de juego.
     opponentInterpolationState = OpponentInterpolationState(); // Restablece el estado de interpolación del oponente.
     m_opponentBulletStates.clear(); // Limpia el estado de las balas del oponente.
