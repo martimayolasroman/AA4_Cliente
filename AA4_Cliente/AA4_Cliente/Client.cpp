@@ -251,7 +251,10 @@ void Client::connectToGameServerUDP() {
     //    gameUdpSocket.unbind(); // Desenlaza el socket si ya estaba conectado.
     //}
 
-    if (gameUdpSocket.bind(m_myUdpPortForGame/*, sf::IpAddress::resolve(m_gameServerIp).value()*/) != sf::Socket::Status::Done) {
+    //Disconnect TCP server
+   // Clientsocket.disconnect();
+
+    if (gameUdpSocket.bind(m_myUdpPortForGame) != sf::Socket::Status::Done) {
         std::cerr << "[Client-UDP] Error al enlazar socket UDP al puerto local: " << m_myUdpPortForGame << std::endl;
         m_isConnectedToGameServer = false;
         m_matchFound = false;
