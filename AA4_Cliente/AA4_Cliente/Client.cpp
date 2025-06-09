@@ -247,11 +247,11 @@ bool Client::requestMatchmakingFriendly() {
 
 // connectToGameServerUDP: Intenta enlazar el socket UDP del cliente y conectar al servidor de juego.
 void Client::connectToGameServerUDP() {
-    if (m_isConnectedToGameServer) {
-        gameUdpSocket.unbind(); // Desenlaza el socket si ya estaba conectado.
-    }
+    //if (m_isConnectedToGameServer,m_gameServerIp) {
+    //    gameUdpSocket.unbind(); // Desenlaza el socket si ya estaba conectado.
+    //}
 
-    if (gameUdpSocket.bind(m_myUdpPortForGame) != sf::Socket::Status::Done) {
+    if (gameUdpSocket.bind(m_myUdpPortForGame, sf::IpAddress::resolve(m_gameServerIp).value()) != sf::Socket::Status::Done) {
         std::cerr << "[Client-UDP] Error al enlazar socket UDP al puerto local: " << m_myUdpPortForGame << std::endl;
         m_isConnectedToGameServer = false;
         m_matchFound = false;
