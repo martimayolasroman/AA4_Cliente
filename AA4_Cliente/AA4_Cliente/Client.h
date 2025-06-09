@@ -85,6 +85,9 @@ private:
     int opponentPlayerHealth = 0;
     int opponentPlayerLives = 0;
 
+ 
+
+
     Client();
     bool sendPacket(sf::Packet& packet);
     void processPacket(sf::Packet tcp_packet);
@@ -144,6 +147,10 @@ public:
     void receiveAndProcessGameData();
     void sendPlayerInput(float moveDir, bool wantsToShoot, bool jumpRequestedThisTick); 
     void addSentInputToHistory(const ClientInputRecord& input);
+
+    //GameOver
+    std::atomic<bool> m_gameOver{ false };
+    std::string m_gameOverMessage;
 
    // void sendPlayerTaunt();  
    // void playTauntSound();   

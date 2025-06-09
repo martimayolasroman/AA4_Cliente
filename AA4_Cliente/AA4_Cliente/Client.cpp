@@ -10,8 +10,14 @@ enum PacketType {
     S_MAP_DATA = 100, S_LOGIN_OK = 101, S_LOGIN_FAIL = 102, S_REGISTER_OK = 103, S_REGISTER_FAIL = 104,
     S_ADDED_TO_MATCHMAKING_QUEUE = 105, S_MATCH_FOUND = 106,
     S_GAME_STATE = 107, C_PLAYER_TAUNT = 108, S_OPPONENT_TAUNT = 109,
-    S_ERROR_GENERAL = 110,
+    S_ERROR_GENERAL = 110, S_GAME_OVER_RESULT = 250,
     UNKNOWN = 255
+};
+
+enum  GameResultType {
+    YOU_WON = 0,
+    YOU_LOST = 1,
+    OPPONENT_DISCONNECTED = 3
 };
 
 sf::Clock udpPacketReceiveClock;
@@ -23,6 +29,16 @@ inline sf::Packet& operator >> (sf::Packet& packet, PacketType& tipo) {
 
 // Sobrecarga del operador << para insertar un PacketType en un sf::Packet.
 inline sf::Packet& operator << (sf::Packet& packet, PacketType tipo) {
+    packet << static_cast<int>(tipo); return packet;
+}
+
+// Sobrecarga del operador >> para extraer un PacketType de un sf::Packet.
+inline sf::Packet& operator >> (sf::Packet& packet, GameResultType& tipo) {
+    int temp; packet >> temp; tipo = static_cast<GameResultType>(temp); return packet;
+}
+
+// Sobrecarga del operador << para insertar un PacketType en un sf::Packet.
+inline sf::Packet& operator << (sf::Packet& packet, GameResultType tipo) {
     packet << static_cast<int>(tipo); return packet;
 }
 
@@ -251,8 +267,7 @@ void Client::connectToGameServerUDP() {
     //    gameUdpSocket.unbind(); // Desenlaza el socket si ya estaba conectado.
     //}
 
-    //Disconnect TCP server
-   // Clientsocket.disconnect();
+
 
     if (gameUdpSocket.bind(m_myUdpPortForGame) != sf::Socket::Status::Done) {
         std::cerr << "[Client-UDP] Error al enlazar socket UDP al puerto local: " << m_myUdpPortForGame << std::endl;
@@ -311,7 +326,7 @@ void Client::processGamePacket(sf::Packet& udp_packet) {
         return;
     }
 
-    if (rawPacketType == static_cast<int>(S_GAME_STATE)) {
+    if (rawPacketType == S_GAME_STATE) {
         float p1x, p1y, p2x, p2y;
         int p1h, p1l, p2h, p2l;
         float p1vx, p1vy, p2vx, p2vy;
@@ -398,6 +413,27 @@ void Client::processGamePacket(sf::Packet& udp_packet) {
         }
         else {
             std::cerr << "[Client-UDP] Error deserializando S_GAME_STATE (faltan campos de velocidad/onGround?)." << std::endl;
+        }
+    }
+    else if (rawPacketType == S_GAME_OVER_RESULT) {
+
+
+        GameResultType result;
+        if (udp_packet >> result) {
+            m_gameOver = true;
+            if (result == YOU_WON) {
+                m_gameOverMessage = "¡GANASTE!";
+            }
+            else if (result == YOU_LOST) {
+                m_gameOverMessage = "PERDISTE";
+            }
+
+            else {
+                m_gameOverMessage = "Partida Terminada";
+            }
+            std::cout << "[Client-UDP] Recibido S_GAME_OVER_RESULT: " << m_gameOverMessage << std::endl;
+
+
         }
     }
     else {

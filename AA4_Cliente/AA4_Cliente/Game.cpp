@@ -282,11 +282,16 @@ void Game::run() {
         return;
     }
 
+
+    m_client->m_gameOver = false; // Resetear al inicio de la instancia de juego
+    m_client->m_gameOverMessage = "";
+
+
     m_interpolationRenderClock.restart(); // Reinicia el reloj para la interpolación visual.
     m_gameLogicClock.restart(); // Reinicia el reloj para la lógica del juego.
     m_accumulatedTimeForPrediction = 0.f; // Resetea el tiempo acumulado para la predicción.
 
-     while (m_window->isOpen()) {
+    while (m_window->isOpen()) {
         float frameDeltaTime = m_gameLogicClock.restart().asSeconds(); // Tiempo que ha pasado desde el último frame.
         m_accumulatedTimeForPrediction += frameDeltaTime; // Acumula el tiempo para los ticks de física.
 
@@ -296,13 +301,13 @@ void Game::run() {
 
         // 1. PROCESAR INPUTS  Y EVENTOS 
         std::optional<sf::Event> opt_event;
-        while ((opt_event = m_window->pollEvent())) {  
+        while ((opt_event = m_window->pollEvent())) {
             sf::Event& event = *opt_event;
             if (event.is<sf::Event::Closed>()) {
-                m_window->close();  
+                m_window->close();
             }
 
-             if (m_gameHasStarted && !m_gameOverState) {
+            if (m_gameHasStarted && !m_gameOverState) {
                 if (const auto* keyPressed = event.getIf<sf::Event::KeyPressed>()) {
                     // Mover izquierda o derecha.
                     if (keyPressed->code == sf::Keyboard::Key::A || keyPressed->code == sf::Keyboard::Key::Left) {
@@ -332,7 +337,7 @@ void Game::run() {
                 }
             }
         }
-        m_currentMoveDirection = newMoveDirectionInput; 
+        m_currentMoveDirection = newMoveDirectionInput;
 
         // 2. PROCESAR DATOS DE RED Y RECONCILIACIÓN
         if (m_client->isConnectedToGameServer()) {
@@ -342,141 +347,150 @@ void Game::run() {
             if (!m_gameHasStarted && m_client->getLastServerConfirmedMyPlayerPosition().x != -1.f) {
                 m_gameHasStarted = true;
                 m_interpolationRenderClock.restart();
-                if (m_waitingText && m_fontLoaded) m_waitingText->setString("Partida Encontrada!"); 
+                if (m_waitingText && m_fontLoaded) m_waitingText->setString("Partida Encontrada!");
                 // Sincroniza la posición, velocidad  
                 m_player.sprite->setPosition(m_client->getLastServerConfirmedMyPlayerPosition());
                 m_player.velocity = m_client->getMyPlayerServerVelocity();
                 m_player.onGround = m_client->getMyPlayerOnGround();
                 m_playerShootCooldown = 0.0f; // Asegura que se pueda disparar al inicio.
             }
-             if (m_gameHasStarted) {
+            if (m_gameHasStarted) {
                 m_player.health = m_client->getMyPlayerHealth();
                 m_player.lives = m_client->getMyPlayerLives();
             }
 
-            // Reconcilia el estado del jugador local con lo que dice el servidor.
+            if (m_client->m_gameOver) { // Comprobar si la partida ha terminado
+                m_gameOverState = true; // Activa el mensaje de GAME OVER en la UI de Game
+
+                // Reconcilia el estado del jugador local con lo que dice el servidor.
+                if (m_gameHasStarted && !m_gameOverState) {
+                    reconcilePlayer();
+                }
+            }
+            else if (m_client->hasMatchBeenFound() && m_waitingText && m_fontLoaded) {
+                m_waitingText->setString("Conectando al servidor de juego...");
+            }
+
+
+            // 3. PREDICCIÓN DEL JUGADOR LOCAL 
             if (m_gameHasStarted && !m_gameOverState) {
-                reconcilePlayer();
-            }
-        }
-         else if (m_client->hasMatchBeenFound() && m_waitingText && m_fontLoaded) {
-            m_waitingText->setString("Conectando al servidor de juego...");
-        }
- 
-
-        // 3. PREDICCIÓN DEL JUGADOR LOCAL 
-        if (m_gameHasStarted && !m_gameOverState) {
-            while (m_accumulatedTimeForPrediction >= FIXED_DELTA_TIME) {
-                // Restamos cooldown del dispro
-                if (m_playerShootCooldown > 0) {
-                    m_playerShootCooldown -= FIXED_DELTA_TIME;
-                    if (m_playerShootCooldown < 0) m_playerShootCooldown = 0;
-                }
-
-                // Si el jugador pidió disparar y el cooldown lo permite, crea una bala  
-                if (m_shootRequestedThisFrame && m_playerShootCooldown <= 0) {
-                    m_predictedMyBullets.emplace_back(m_player.sprite->getPosition(), m_player.facingRight);
-                    m_playerShootCooldown = SHOOT_COOLDOWN;  
-                }
-
-                // Aplica el movimiento al jugador local directamtne sin servidor
-                applyPlayerMovement(m_player, m_currentMoveDirection, m_jumpRequestedThisFrame, FIXED_DELTA_TIME);
-
-                // Envía los inputs del jugador al servidor.
-                if (m_client->isConnectedToGameServer()) {
-                    m_client->sendPlayerInput(m_currentMoveDirection, m_shootRequestedThisFrame, m_jumpRequestedThisFrame);
-                }
-                m_accumulatedTimeForPrediction -= FIXED_DELTA_TIME;  
-            }
-        }
-
-        // 4. ACTUALIZAR BALAS 
-        updatePredictedBullets(frameDeltaTime); // Actualiza las balas que nosotros hemos disparado.
-        updateInterpolatedOpponentBullets(frameDeltaTime); // Actualiza las balas que ha disparado el oponente (recibidas del servidor).
-
-         if (m_player.lives <= 0 && !m_gameOverState && m_gameHasStarted) {
-            m_gameOverState = true;
-        }
-
-        // INTERPOLACIÓN DEL OPONENTE ayuda ia
-        if (m_gameHasStarted && m_client->isConnectedToGameServer() && !m_gameOverState) {
-            const OpponentInterpolationState& oppState = m_client->getOpponentInterpolationState();
-            m_opponentPlayer.health = m_client->getOpponentPlayerHealth(); 
-            m_opponentPlayer.lives = m_client->getOpponentPlayerLives();  
-
-            if (oppState.hasReceivedEnoughUpdatesForInterpolation) {
-                sf::Time renderTimeTarget = sf::seconds(m_interpolationRenderClock.getElapsedTime().asSeconds() - INTERPOLATION_DELAY_SECONDS);
-                sf::Time prevTimestamp = oppState.previousTimestamp;
-                sf::Time currTimestamp = oppState.currentTimestamp;
-
-                // Si tenemos suficientes datos y el tiempo de renderizado está entre el estado anterior y el actual, interpolamos.
-                if (oppState.hasReceivedFirstUpdate && renderTimeTarget >= prevTimestamp && currTimestamp > prevTimestamp) {
-                    float timeDiffBetweenUpdates = (currTimestamp - prevTimestamp).asSeconds();
-                    float interpolationFactor = 0.f;
-                    if (timeDiffBetweenUpdates > 0.00001f) {
-                        interpolationFactor = (renderTimeTarget.asSeconds() - prevTimestamp.asSeconds()) / timeDiffBetweenUpdates;
+                while (m_accumulatedTimeForPrediction >= FIXED_DELTA_TIME) {
+                    // Restamos cooldown del dispro
+                    if (m_playerShootCooldown > 0) {
+                        m_playerShootCooldown -= FIXED_DELTA_TIME;
+                        if (m_playerShootCooldown < 0) m_playerShootCooldown = 0;
                     }
-                    interpolationFactor = std::max(0.f, std::min(1.f, interpolationFactor));
 
-                    sf::Vector2f interpolatedPosition;
-                    interpolatedPosition.x = oppState.previousPosition.x + (oppState.currentPosition.x - oppState.previousPosition.x) * interpolationFactor;
-                    interpolatedPosition.y = oppState.previousPosition.y + (oppState.currentPosition.y - oppState.previousPosition.y) * interpolationFactor;
-                    m_opponentPlayer.sprite->setPosition(interpolatedPosition);
+                    // Si el jugador pidió disparar y el cooldown lo permite, crea una bala  
+                    if (m_shootRequestedThisFrame && m_playerShootCooldown <= 0) {
+                        m_predictedMyBullets.emplace_back(m_player.sprite->getPosition(), m_player.facingRight);
+                        m_playerShootCooldown = SHOOT_COOLDOWN;
+                    }
+
+                    // Aplica el movimiento al jugador local directamtne sin servidor
+                    applyPlayerMovement(m_player, m_currentMoveDirection, m_jumpRequestedThisFrame, FIXED_DELTA_TIME);
+
+                    // Envía los inputs del jugador al servidor.
+                    if (m_client->isConnectedToGameServer()) {
+                        m_client->sendPlayerInput(m_currentMoveDirection, m_shootRequestedThisFrame, m_jumpRequestedThisFrame);
+                    }
+                    m_accumulatedTimeForPrediction -= FIXED_DELTA_TIME;
                 }
-                // Si el tiempo de renderizado ya ha pasado el último estado conocido, solo usamos la posición actual.
-                else if (oppState.hasReceivedFirstUpdate && renderTimeTarget > currTimestamp) {
+            }
+
+            // 4. ACTUALIZAR BALAS 
+            updatePredictedBullets(frameDeltaTime); // Actualiza las balas que nosotros hemos disparado.
+            updateInterpolatedOpponentBullets(frameDeltaTime); // Actualiza las balas que ha disparado el oponente (recibidas del servidor).
+
+            if (m_player.lives <= 0 && !m_gameOverState && m_gameHasStarted) {
+                m_gameOverState = true;
+            }
+
+            // INTERPOLACIÓN DEL OPONENTE ayuda ia
+            if (m_gameHasStarted && m_client->isConnectedToGameServer() && !m_gameOverState) {
+                const OpponentInterpolationState& oppState = m_client->getOpponentInterpolationState();
+                m_opponentPlayer.health = m_client->getOpponentPlayerHealth();
+                m_opponentPlayer.lives = m_client->getOpponentPlayerLives();
+
+                if (oppState.hasReceivedEnoughUpdatesForInterpolation) {
+                    sf::Time renderTimeTarget = sf::seconds(m_interpolationRenderClock.getElapsedTime().asSeconds() - INTERPOLATION_DELAY_SECONDS);
+                    sf::Time prevTimestamp = oppState.previousTimestamp;
+                    sf::Time currTimestamp = oppState.currentTimestamp;
+
+                    // Si tenemos suficientes datos y el tiempo de renderizado está entre el estado anterior y el actual, interpolamos.
+                    if (oppState.hasReceivedFirstUpdate && renderTimeTarget >= prevTimestamp && currTimestamp > prevTimestamp) {
+                        float timeDiffBetweenUpdates = (currTimestamp - prevTimestamp).asSeconds();
+                        float interpolationFactor = 0.f;
+                        if (timeDiffBetweenUpdates > 0.00001f) {
+                            interpolationFactor = (renderTimeTarget.asSeconds() - prevTimestamp.asSeconds()) / timeDiffBetweenUpdates;
+                        }
+                        interpolationFactor = std::max(0.f, std::min(1.f, interpolationFactor));
+
+                        sf::Vector2f interpolatedPosition;
+                        interpolatedPosition.x = oppState.previousPosition.x + (oppState.currentPosition.x - oppState.previousPosition.x) * interpolationFactor;
+                        interpolatedPosition.y = oppState.previousPosition.y + (oppState.currentPosition.y - oppState.previousPosition.y) * interpolationFactor;
+                        m_opponentPlayer.sprite->setPosition(interpolatedPosition);
+                    }
+                    // Si el tiempo de renderizado ya ha pasado el último estado conocido, solo usamos la posición actual.
+                    else if (oppState.hasReceivedFirstUpdate && renderTimeTarget > currTimestamp) {
+                        m_opponentPlayer.sprite->setPosition(oppState.currentPosition);
+                    }
+                    // Si no hay suficientes actualizaciones para interpolar, usa la posición más reciente.
+                    else {
+                        m_opponentPlayer.sprite->setPosition(oppState.hasReceivedFirstUpdate ? oppState.currentPosition : oppState.previousPosition);
+                    }
+                }
+                // Si solo hemos recibido la primera actualización,   coloca al oponente en esa posición.
+                else if (oppState.hasReceivedFirstUpdate) {
                     m_opponentPlayer.sprite->setPosition(oppState.currentPosition);
                 }
-                // Si no hay suficientes actualizaciones para interpolar, usa la posición más reciente.
-                else {
-                    m_opponentPlayer.sprite->setPosition(oppState.hasReceivedFirstUpdate ? oppState.currentPosition : oppState.previousPosition);
+            }
+
+            // RENDERIZADO: Dibujar todo en la pantalla.
+            m_window->clear(COLOR_BACKGROUND);
+            for (const auto& platform : m_platforms) { m_window->draw(platform); } // Dibuja todas las plataformas.
+
+            for (const auto& bullet : m_predictedMyBullets) {
+                if (bullet.isActive) {
+                    m_window->draw(bullet.shape);
                 }
             }
-            // Si solo hemos recibido la primera actualización,   coloca al oponente en esa posición.
-            else if (oppState.hasReceivedFirstUpdate) {
-                m_opponentPlayer.sprite->setPosition(oppState.currentPosition);
+            for (const auto& bullet : m_interpolatedOpponentBullets) {
+                if (bullet.isActive) {
+                    m_window->draw(bullet.shape);
+                }
             }
-        }
 
-        // RENDERIZADO: Dibujar todo en la pantalla.
-        m_window->clear(COLOR_BACKGROUND); 
-        for (const auto& platform : m_platforms) { m_window->draw(platform); } // Dibuja todas las plataformas.
+            if (m_gameHasStarted) {
+                if (m_player.sprite) m_window->draw(*m_player.sprite);
+                if (m_client->getOpponentInterpolationState().hasReceivedFirstUpdate) {
+                    if (m_opponentPlayer.sprite) m_window->draw(*m_opponentPlayer.sprite); // Dibuja al oponente.
+                }
+                // Dibuja la salud y vidas  
+                if (m_fontLoaded) {
+                    if (m_healthText) { m_healthText->setString("Health: " + std::to_string(m_player.health)); m_window->draw(*m_healthText); }
+                    if (m_livesText) { m_livesText->setString("Lives: " + std::to_string(m_player.lives)); m_window->draw(*m_livesText); }
+                }
 
-        for (const auto& bullet : m_predictedMyBullets) { 
-            if (bullet.isActive) {
-                m_window->draw(bullet.shape);
-            }
-        }
-        for (const auto& bullet : m_interpolatedOpponentBullets) {  
-            if (bullet.isActive) {
-                m_window->draw(bullet.shape);
-            }
-        }
 
-        if (m_gameHasStarted) {
-            if (m_player.sprite) m_window->draw(*m_player.sprite); 
-             if (m_client->getOpponentInterpolationState().hasReceivedFirstUpdate) {
-                if (m_opponentPlayer.sprite) m_window->draw(*m_opponentPlayer.sprite); // Dibuja al oponente.
-            }
-            // Dibuja la salud y vidas  
-            if (m_fontLoaded) {
-                if (m_healthText) { m_healthText->setString("Health: " + std::to_string(m_player.health)); m_window->draw(*m_healthText); }
-                if (m_livesText) { m_livesText->setString("Lives: " + std::to_string(m_player.lives)); m_window->draw(*m_livesText); }
-            }
-        }
-        // Si la partida no ha empezado, muestra el texto de espera.
-        else if (m_waitingText && m_fontLoaded) {
-            m_window->draw(*m_waitingText);
-        }
-         
-        if (m_gameOverState && m_gameOverText && m_fontLoaded) {
-            m_window->draw(*m_gameOverText);
-        }
-        m_window->display();  
 
- 
-        if (!m_window->isOpen()) {
-            break;
+
+
+            }
+            // Si la partida no ha empezado, muestra el texto de espera.
+            else if (m_waitingText && m_fontLoaded) {
+                m_window->draw(*m_waitingText);
+            }
+
+            if (m_gameOverState && m_gameOverText && m_fontLoaded) {
+                m_window->draw(*m_gameOverText);
+            }
+            m_window->display();
+
+
+            if (!m_window->isOpen()) {
+                break;
+            }
         }
     }
 }
