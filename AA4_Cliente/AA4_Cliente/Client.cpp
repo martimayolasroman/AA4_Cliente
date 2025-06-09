@@ -10,7 +10,7 @@ enum PacketType {
     S_MAP_DATA = 100, S_LOGIN_OK = 101, S_LOGIN_FAIL = 102, S_REGISTER_OK = 103, S_REGISTER_FAIL = 104,
     S_ADDED_TO_MATCHMAKING_QUEUE = 105, S_MATCH_FOUND = 106,
     S_GAME_STATE = 107, C_PLAYER_TAUNT = 108, S_OPPONENT_TAUNT = 109,
-    S_ERROR_GENERAL = 110, S_GAME_OVER_RESULT = 250,
+    S_ERROR_GENERAL = 110, S_GAME_OVER_RESULT = 250, S_PING = 251 , C_PONG= 252 ,
     UNKNOWN = 255
 };
 
@@ -434,6 +434,17 @@ void Client::processGamePacket(sf::Packet& udp_packet) {
             std::cout << "[Client-UDP] Recibido S_GAME_OVER_RESULT: " << m_gameOverMessage << std::endl;
 
 
+        }
+    }
+    else if (rawPacketType == S_PING) {
+        sf::Packet pongPacket;
+        pongPacket << C_PONG;
+        // Enviar PONG de vuelta al GameServer
+        std::optional<sf::IpAddress> resolved_ip = sf::IpAddress::resolve(m_gameServerIp);
+        if (resolved_ip && resolved_ip.value() != sf::IpAddress::Any) {
+            if (gameUdpSocket.send(pongPacket, resolved_ip.value(), m_gameServerUdpPort) != sf::Socket::Status::Done) {
+                std::cerr << "[Client-UDP] Error enviando PONG." << std::endl;
+            }
         }
     }
     else {
