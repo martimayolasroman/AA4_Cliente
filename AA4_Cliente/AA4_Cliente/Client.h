@@ -98,7 +98,7 @@ private:
 
     sf::TcpSocket Clientsocket;
     bool connected;
-    const sf::IpAddress SERVER_IP = sf::IpAddress(192,168,1,67);
+    const sf::IpAddress SERVER_IP = sf::IpAddress(127,0,0,1);
     unsigned short myPort;
     std::string clientNick;
 
