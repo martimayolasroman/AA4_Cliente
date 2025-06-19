@@ -43,7 +43,7 @@ struct ServerBulletState {
 };
 
 class Client {
-private:
+public:
     static Client* instanceClient;
 
     bool loginOk = false;

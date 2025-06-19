@@ -9,7 +9,7 @@
 #include <sstream>
 #include <optional>
 #include <algorithm>
-
+#include "GameState.h"
 #include "Player.h"
 #include "Bullet.h" 
 
@@ -93,7 +93,7 @@ class Game {
 public:
     Game(sf::RenderWindow* window, Client* client_instance);
     ~Game();
-    void run();
+    GameState run();
 
 private:
     float m_currentMoveDirection;

@@ -282,10 +282,10 @@ void Game::updateInterpolatedOpponentBullets(float deltaTime) {
     }
 }
 
-void Game::run() {
+GameState Game::run() {
     if (!m_client || !m_window) {
         std::cerr << "[Game] Error: Client o Window no proporcionado a Game::run(). Saliendo." << std::endl;
-        return;
+        return GameState::SEARCH;
     }
 
 
@@ -409,6 +409,7 @@ void Game::run() {
 
             if (m_client->m_gameOver) { // Comprobar si la partida ha terminado
                 m_gameOverState = true; // Activa el mensaje de GAME OVER en la UI de Game
+                return GameState::SEARCH;
 
             }
                 // Reconcilia el estado del jugador local con lo que dice el servidor.

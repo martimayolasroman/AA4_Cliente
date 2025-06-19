@@ -53,20 +53,20 @@ int main() {
             if (clientInstance->hasMatchBeenFound() && clientInstance->isConnectedToGameServer()) {
                 std::cout << "[Main] Entrando al estado GAME." << std::endl;
                 Game shooterGame(window, clientInstance);
-                shooterGame.run();
+                currentState = shooterGame.run();
 
-                if (window->isOpen()) {
+               /* if (window->isOpen()) {
                     std::cout << "[Main] Saliendo del estado GAME, volviendo a SEARCH." << std::endl;
                     currentState = GameState::SEARCH;
                 }
                 else {
                     currentState = GameState::EXIT;
-                }
+                }*/
             }
-            else {
+            /*else {
                 std::cerr << "[Main] Intento de entrar a GAME sin partida encontrada o sin conexión UDP. Volviendo a SEARCH." << std::endl;
                 currentState = GameState::SEARCH;
-            }
+            }*/
             break;
         }
         case GameState::EXIT:
