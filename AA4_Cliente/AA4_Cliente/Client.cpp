@@ -390,7 +390,7 @@ void Client::processGamePacket(sf::Packet& udp_packet) {
             int numBullets;
             if (udp_packet >> numBullets) {
                 m_opponentBulletStates.clear(); // Limpia la lista actual de balas del oponente.
-                for (int i = 0; i < numBullets; ++i) {
+                for (int i = 0; i < numBullets; i++) {
                     float bx, by, bvx, bvy, br;
                     bool bactive;
                     int bownerId;

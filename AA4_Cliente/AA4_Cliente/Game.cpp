@@ -163,7 +163,10 @@ void Game::applyPlayerMovement(Player& player, float moveDirInput, bool jumpRequ
     player.sprite->move({ 0.f, player.velocity.y * deltaTime });
     player.onGround = false;  
     sf::FloatRect playerBounds = player.sprite->getGlobalBounds();
-    for (const auto& platform : m_platforms) {
+
+
+    for (size_t i = 0; i < m_platforms.size(); i++) {
+        const sf::RectangleShape& platform = m_platforms[i]; // Obtener referencia a la plataforma actual
         std::optional<sf::FloatRect> intersection = playerBounds.findIntersection(platform.getGlobalBounds());
         if (intersection) {
             // Si choca por abajo, lo pone encima de la plataforma y resetea la velocidad Y.
@@ -178,7 +181,8 @@ void Game::applyPlayerMovement(Player& player, float moveDirInput, bool jumpRequ
     // Movimiento horizontal y detección de colisiones con plataformas.
     player.sprite->move({ player.velocity.x * deltaTime, 0.f });
     playerBounds = player.sprite->getGlobalBounds();
-    for (const auto& platform : m_platforms) {
+    for (size_t i = 0; i < m_platforms.size(); i++) {
+        const sf::RectangleShape& platform = m_platforms[i]; 
         std::optional<sf::FloatRect> intersection = playerBounds.findIntersection(platform.getGlobalBounds());
         if (intersection) {
             // Si choca por la derecha, lo mueve a la izquierda de la plataforma.
@@ -266,7 +270,9 @@ void Game::updateInterpolatedOpponentBullets(float deltaTime) {
 
     // Reiniciamos la lista de balas del oponente con las que recibimos del servidor.
     m_interpolatedOpponentBullets.clear();
-    for (const auto& sBullet : serverBullets) {
+
+    for (size_t i = 0; i < serverBullets.size(); i++) {
+        const ServerBulletState& sBullet = serverBullets[i]; // Obtener referencia a la bala del servidor actual
         m_interpolatedOpponentBullets.emplace_back(sBullet.position, BULLET_RADIUS);
         m_interpolatedOpponentBullets.back().isActive = sBullet.isActive;
 
@@ -351,7 +357,37 @@ void Game::run() {
         }
         m_currentMoveDirection = newMoveDirectionInput;
 
-        // 2. PROCESAR DATOS DE RED Y RECONCILIACIÓN
+
+        // 2. PREDICCIÓN DEL JUGADOR LOCAL 
+        if (m_gameHasStarted && !m_gameOverState) {
+            while (m_accumulatedTimeForPrediction >= FIXED_DELTA_TIME) {
+                // Restamos cooldown del dispro
+                if (m_playerShootCooldown > 0) {
+                    m_playerShootCooldown -= FIXED_DELTA_TIME;
+                    if (m_playerShootCooldown < 0) m_playerShootCooldown = 0;
+                }
+
+                // Si el jugador pidió disparar y el cooldown lo permite, crea una bala  
+                if (m_shootRequestedThisFrame && m_playerShootCooldown <= 0) {
+                    m_predictedMyBullets.emplace_back(m_player.sprite->getPosition(), m_player.facingRight);
+                    m_playerShootCooldown = SHOOT_COOLDOWN;
+                }
+
+                // Aplica el movimiento al jugador local directamtne sin servidor
+                applyPlayerMovement(m_player, m_currentMoveDirection, m_jumpRequestedThisFrame, FIXED_DELTA_TIME);
+
+                // Envía los inputs del jugador al servidor.
+                if (m_client->isConnectedToGameServer()) {
+                    m_client->sendPlayerInput(m_currentMoveDirection, m_shootRequestedThisFrame, m_jumpRequestedThisFrame);
+                }
+                m_accumulatedTimeForPrediction -= FIXED_DELTA_TIME;
+            }
+        }
+
+        updatePredictedBullets(frameDeltaTime); // Actualiza las balas que nosotros hemos disparado.
+
+
+        // 3. PROCESAR DATOS DE RED Y RECONCILIACIÓN
         if (m_client->isConnectedToGameServer()) {
             m_client->receiveAndProcessGameData(); // Recibe y procesa los datos de juego del servidor 
 
@@ -374,44 +410,21 @@ void Game::run() {
             if (m_client->m_gameOver) { // Comprobar si la partida ha terminado
                 m_gameOverState = true; // Activa el mensaje de GAME OVER en la UI de Game
 
+            }
                 // Reconcilia el estado del jugador local con lo que dice el servidor.
                 if (m_gameHasStarted && !m_gameOverState) {
                     reconcilePlayer();
+                
                 }
-            }
             else if (m_client->hasMatchBeenFound() && m_waitingText && m_fontLoaded) {
                 m_waitingText->setString("Conectando al servidor de juego...");
             }
 
 
-            // 3. PREDICCIÓN DEL JUGADOR LOCAL 
-            if (m_gameHasStarted && !m_gameOverState) {
-                while (m_accumulatedTimeForPrediction >= FIXED_DELTA_TIME) {
-                    // Restamos cooldown del dispro
-                    if (m_playerShootCooldown > 0) {
-                        m_playerShootCooldown -= FIXED_DELTA_TIME;
-                        if (m_playerShootCooldown < 0) m_playerShootCooldown = 0;
-                    }
-
-                    // Si el jugador pidió disparar y el cooldown lo permite, crea una bala  
-                    if (m_shootRequestedThisFrame && m_playerShootCooldown <= 0) {
-                        m_predictedMyBullets.emplace_back(m_player.sprite->getPosition(), m_player.facingRight);
-                        m_playerShootCooldown = SHOOT_COOLDOWN;
-                    }
-
-                    // Aplica el movimiento al jugador local directamtne sin servidor
-                    applyPlayerMovement(m_player, m_currentMoveDirection, m_jumpRequestedThisFrame, FIXED_DELTA_TIME);
-
-                    // Envía los inputs del jugador al servidor.
-                    if (m_client->isConnectedToGameServer()) {
-                        m_client->sendPlayerInput(m_currentMoveDirection, m_shootRequestedThisFrame, m_jumpRequestedThisFrame);
-                    }
-                    m_accumulatedTimeForPrediction -= FIXED_DELTA_TIME;
-                }
-            }
+            
 
             // 4. ACTUALIZAR BALAS 
-            updatePredictedBullets(frameDeltaTime); // Actualiza las balas que nosotros hemos disparado.
+           
             updateInterpolatedOpponentBullets(frameDeltaTime); // Actualiza las balas que ha disparado el oponente (recibidas del servidor).
 
             if (m_player.lives <= 0 && !m_gameOverState && m_gameHasStarted) {
@@ -460,16 +473,16 @@ void Game::run() {
 
             // RENDERIZADO: Dibujar todo en la pantalla.
             m_window->clear(COLOR_BACKGROUND);
-            for (const auto& platform : m_platforms) { m_window->draw(platform); } // Dibuja todas las plataformas.
+            for (size_t i = 0; i < m_platforms.size(); i++) { m_window->draw(m_platforms[i]); } // Dibuja todas las plataformas.
 
-            for (const auto& bullet : m_predictedMyBullets) {
-                if (bullet.isActive) {
-                    m_window->draw(bullet.shape);
+            for (size_t i = 0; i < m_predictedMyBullets.size(); i++) {
+                if (m_predictedMyBullets[i].isActive) {
+                    m_window->draw(m_predictedMyBullets[i].shape);
                 }
             }
-            for (const auto& bullet : m_interpolatedOpponentBullets) {
-                if (bullet.isActive) {
-                    m_window->draw(bullet.shape);
+            for (size_t i = 0; i < m_interpolatedOpponentBullets.size(); i++) {
+                if (m_interpolatedOpponentBullets[i].isActive) {
+                    m_window->draw(m_interpolatedOpponentBullets[i].shape);
                 }
             }
 
