@@ -99,7 +99,7 @@ GameState Login::Update()
 
 		while (const std::optional event = window->pollEvent()) {
 			GameState state = EventHandler(*event); // Procesar input del usuario
-			if (state != GameState::LOGIN) {
+			if (state != GameState::SEARCH) {
 				return state; // Si EventHandler cambia el estado (ej. EXIT)
 			}
 		}
@@ -108,7 +108,8 @@ GameState Login::Update()
 		Render(window); // Dibujar la UI
 	}
 
-	
+	return GameState::EXIT; // Si la ventana se cierra
+
 }
 
 void Login::Render(sf::RenderWindow* window)

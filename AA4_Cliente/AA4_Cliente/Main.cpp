@@ -33,54 +33,47 @@ int main() {
         delete window;
         return -1;
     }
+    Login loginMenu(window);
 
     SearchGameMenu searchMenu(window);
 
     std::cout << "[Main] Iniciando bucle principal del cliente..." << std::endl;
 
-    while (currentState != GameState::EXIT && window->isOpen()) {
-        clientInstance->run();
+	while (currentState != GameState::EXIT && window->isOpen()) {
+		clientInstance->run();
 
-        switch (currentState) {
-        case GameState::LOGIN: {
-            Login loginMenu(window);
-            currentState = loginMenu.Update();
-        }
-                             break;
-        case GameState::SEARCH: {
-            currentState = searchMenu.Update();
-        }
-                              break;
-        case GameState::GAME: {
-            if (clientInstance->hasMatchBeenFound() && clientInstance->isConnectedToGameServer()) {
-                std::cout << "[Main] Entrando al estado GAME." << std::endl;
-                Game shooterGame(window, clientInstance);
-                currentState = shooterGame.run();
-                std::cout << "[Main] NUEVO CURRENT STATE.: " << (int)currentState << std::endl;
-                break;
-            }
-        case GameState::EXIT:
-            std::cout << "[Main] Estado EXIT alcanzado. Preparando para cerrar." << std::endl;
-            break;
-        default:
-            std::cerr << "[Main] Estado desconocido en Main: " << static_cast<int>(currentState) << ". Saliendo." << std::endl;
-            currentState = GameState::EXIT;
-            break;
-        }
+		switch (currentState) {
+		case GameState::LOGIN:
+			currentState = loginMenu.Update();
 
-                            if (!window->isOpen() && currentState != GameState::EXIT) {
-                                std::cout << "[Main] Ventana cerrada en un estado de menú. Saliendo." << std::endl;
-                                currentState = GameState::EXIT;
-                            }
-        }
+			break;
+		case GameState::SEARCH: {
+			currentState = searchMenu.Update();
+		}
+							  break;
+		case GameState::GAME: {
+			if (clientInstance->hasMatchBeenFound() && clientInstance->isConnectedToGameServer()) {
+				std::cout << "[Main] Entrando al estado GAME." << std::endl;
+				Game shooterGame(window, clientInstance);
+				currentState = shooterGame.run();
+				std::cout << "[Main] NUEVO CURRENT STATE.: " << (int)currentState << std::endl;
+				break;
+			}
+		}
+		case GameState::EXIT:
+			std::cout << "[Main] Estado EXIT alcanzado. Preparando para cerrar." << std::endl;
+			break;
+		default:
+			std::cerr << "[Main] Estado desconocido en Main: " << static_cast<int>(currentState) << ". Saliendo." << std::endl;
+			currentState = GameState::EXIT;
+			break;
+		}
+	}
+	std::cout << std::endl << std::endl << "[Main] Saliendo de la aplicación." << std::endl;
 
-        std::cout << std::endl << std::endl << "[Main] Saliendo de la aplicación." << std::endl;
-
-        if (window) {
-            delete window;
-            window = nullptr;
-        }
-
-        return 0;
-    }
+	if (window) {
+		delete window;
+		window = nullptr;
+	}
+	return 0;
 }
