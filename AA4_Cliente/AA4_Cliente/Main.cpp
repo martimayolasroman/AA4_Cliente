@@ -34,7 +34,6 @@ int main() {
         return -1;
     }
 
-    Login loginMenu(window);
     SearchGameMenu searchMenu(window);
 
     std::cout << "[Main] Iniciando bucle principal del cliente..." << std::endl;
@@ -43,30 +42,21 @@ int main() {
         clientInstance->run();
 
         switch (currentState) {
-        case GameState::LOGIN:
+        case GameState::LOGIN: {
+            Login loginMenu(window);
             currentState = loginMenu.Update();
+        }
             break;
-        case GameState::SEARCH:
+        case GameState::SEARCH: {
             currentState = searchMenu.Update();
+        }
             break;
         case GameState::GAME: {
             if (clientInstance->hasMatchBeenFound() && clientInstance->isConnectedToGameServer()) {
                 std::cout << "[Main] Entrando al estado GAME." << std::endl;
                 Game shooterGame(window, clientInstance);
                 currentState = shooterGame.run();
-
-               /* if (window->isOpen()) {
-                    std::cout << "[Main] Saliendo del estado GAME, volviendo a SEARCH." << std::endl;
-                    currentState = GameState::SEARCH;
-                }
-                else {
-                    currentState = GameState::EXIT;
-                }*/
-            }
-            /*else {
-                std::cerr << "[Main] Intento de entrar a GAME sin partida encontrada o sin conexión UDP. Volviendo a SEARCH." << std::endl;
-                currentState = GameState::SEARCH;
-            }*/
+                std::cout << "[Main] NUEVO CURRENT STATE.: " << (int)currentState << std::endl;
             break;
         }
         case GameState::EXIT:
@@ -84,7 +74,7 @@ int main() {
         }
     }
 
-    std::cout << "[Main] Saliendo de la aplicación." << std::endl;
+    std::cout << std::endl << std::endl << "[Main] Saliendo de la aplicación." << std::endl;
 
     if (window) {
         delete window;

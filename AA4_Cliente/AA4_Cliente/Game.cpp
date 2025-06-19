@@ -285,8 +285,9 @@ void Game::updateInterpolatedOpponentBullets(float deltaTime) {
 GameState Game::run() {
     if (!m_client || !m_window) {
         std::cerr << "[Game] Error: Client o Window no proporcionado a Game::run(). Saliendo." << std::endl;
-        return GameState::SEARCH;
+        return GameState::EXIT;
     }
+
 
 
     m_client->m_gameOver = false; // Resetear al inicio de la instancia de juego
@@ -298,6 +299,7 @@ GameState Game::run() {
     m_accumulatedTimeForPrediction = 0.f; // Resetea el tiempo acumulado para la predicción.
 
     while (m_window->isOpen()) {
+
         float frameDeltaTime = m_gameLogicClock.restart().asSeconds(); // Tiempo que ha pasado desde el último frame.
         m_accumulatedTimeForPrediction += frameDeltaTime; // Acumula el tiempo para los ticks de física.
 
@@ -409,14 +411,12 @@ GameState Game::run() {
 
             if (m_client->m_gameOver) { // Comprobar si la partida ha terminado
                 m_gameOverState = true; // Activa el mensaje de GAME OVER en la UI de Game
-                return GameState::SEARCH;
-
             }
                 // Reconcilia el estado del jugador local con lo que dice el servidor.
-                if (m_gameHasStarted && !m_gameOverState) {
-                    reconcilePlayer();
-                
-                }
+            if (m_gameHasStarted && !m_gameOverState) {
+                reconcilePlayer();
+            }
+
             else if (m_client->hasMatchBeenFound() && m_waitingText && m_fontLoaded) {
                 m_waitingText->setString("Conectando al servidor de juego...");
             }

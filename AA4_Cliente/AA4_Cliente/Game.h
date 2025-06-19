@@ -41,7 +41,7 @@ const float RESPAWN_Y = 500.0f;
 
 const float BULLET_SPEED = 500.0f;
 const float BULLET_RADIUS = 5.0f;
-const float SHOOT_COOLDOWN = 2.0f;
+const float SHOOT_COOLDOWN = 0.2f;
 
 
 // --- Constantes para Interpolación ---

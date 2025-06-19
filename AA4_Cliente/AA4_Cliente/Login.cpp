@@ -67,7 +67,6 @@ GameState Login::Update()
 	while (window->isOpen()) {
 		Client::getInstance()->run(); // Procesar paquetes entrantes
 		
-
 		// Comprobar si ha llegado una respuesta de login/registro
 		if (Client::getInstance()->hasLoginResponse()) {
 			bool success = Client::getInstance()->getLoginStatus();
@@ -100,7 +99,7 @@ GameState Login::Update()
 
 		while (const std::optional event = window->pollEvent()) {
 			GameState state = EventHandler(*event); // Procesar input del usuario
-			if (state != GameState::SEARCH) {
+			if (state != GameState::LOGIN) {
 				return state; // Si EventHandler cambia el estado (ej. EXIT)
 			}
 		}
@@ -110,7 +109,6 @@ GameState Login::Update()
 	}
 
 	
-	return GameState::EXIT; // Si la ventana se cierra
 }
 
 void Login::Render(sf::RenderWindow* window)
