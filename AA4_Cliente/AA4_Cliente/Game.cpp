@@ -254,6 +254,7 @@ void Game::updatePredictedBullets(float deltaTime) {
         m_predictedMyBullets.end());
 }
 
+//Ayuda IA
 void Game::updateInterpolatedOpponentBullets(float deltaTime) {
     const auto& serverBullets = m_client->getOpponentBulletStates(); // Cogemos la lista de balas del oponente que nos ha mandado el servidor.
 

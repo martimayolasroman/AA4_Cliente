@@ -46,19 +46,19 @@ int main() {
             Login loginMenu(window);
             currentState = loginMenu.Update();
         }
-            break;
+                             break;
         case GameState::SEARCH: {
             currentState = searchMenu.Update();
         }
-            break;
+                              break;
         case GameState::GAME: {
             if (clientInstance->hasMatchBeenFound() && clientInstance->isConnectedToGameServer()) {
                 std::cout << "[Main] Entrando al estado GAME." << std::endl;
                 Game shooterGame(window, clientInstance);
                 currentState = shooterGame.run();
                 std::cout << "[Main] NUEVO CURRENT STATE.: " << (int)currentState << std::endl;
-            break;
-        }
+                break;
+            }
         case GameState::EXIT:
             std::cout << "[Main] Estado EXIT alcanzado. Preparando para cerrar." << std::endl;
             break;
@@ -68,18 +68,19 @@ int main() {
             break;
         }
 
-        if (!window->isOpen() && currentState != GameState::EXIT) {
-            std::cout << "[Main] Ventana cerrada en un estado de menú. Saliendo." << std::endl;
-            currentState = GameState::EXIT;
+                            if (!window->isOpen() && currentState != GameState::EXIT) {
+                                std::cout << "[Main] Ventana cerrada en un estado de menú. Saliendo." << std::endl;
+                                currentState = GameState::EXIT;
+                            }
         }
+
+        std::cout << std::endl << std::endl << "[Main] Saliendo de la aplicación." << std::endl;
+
+        if (window) {
+            delete window;
+            window = nullptr;
+        }
+
+        return 0;
     }
-
-    std::cout << std::endl << std::endl << "[Main] Saliendo de la aplicación." << std::endl;
-
-    if (window) {
-        delete window;
-        window = nullptr;
-    }
-
-    return 0;
 }
